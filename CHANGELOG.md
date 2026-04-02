@@ -2,6 +2,16 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.0.2] - 2026-04-02
+
+### Fixed
+- `main.py`: Lock down CORS — `allow_methods` → `["GET", "POST"]`, `allow_headers` → `["Content-Type"]`, `allow_credentials` → `False` per PRD §14 security requirements
+- `FightPoster.jsx`: Replace two `alert()` calls with inline `aiPosterError` state — error clears on retry, renders in-component instead of browser dialog
+- `backend/.env.example`: Created — documents all required env vars and explicitly calls out both credentials that must be rotated (Gemini API key + Google service account are separate)
+
+### Changed
+- `STATUS.md`: Next 3 Tasks updated to Phase 1 items (schema, migration script, backend wiring); stale `git init` task removed; 3 audit gaps added to P0 bug tracker
+
 ## [0.1.0.1] - 2026-04-01
 
 ### Fixed

@@ -9,7 +9,11 @@
       "Bash(cmd /c \"xcopy /E /I /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\src\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\src\\\\\" && xcopy /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\index.html\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\\\\\\")",
       "Bash(xcopy /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\vite.config.js\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\\\\\\" && xcopy /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\package.json\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\\\\\\"\" && echo \"DONE\")",
       "Bash(mkdir:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Skill(review)",
+      "Skill(ship)",
+      "Bash(grep -n \"alert\\(\\)\\\\|alert\\(\" frontend/src/components/*.jsx frontend/src/pages/*.jsx)",
+      "Bash(git fetch:*)"
     ]
   }
 }
