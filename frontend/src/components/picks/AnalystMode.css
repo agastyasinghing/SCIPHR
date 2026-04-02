@@ -1,0 +1,45 @@
+/* Analyst Mode Styles - Placeholder */
+
+.analyst-mode-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.analyst-placeholder {
+  padding: var(--spacing-4xl);
+}
+
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--spacing-lg);
+  min-height: 400px;
+}
+
+.placeholder-icon {
+  font-size: 5rem;
+}
+
+.placeholder-content h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.placeholder-content p {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.placeholder-note {
+  max-width: 500px;
+  font-size: 0.9375rem !important;
+  color: var(--text-tertiary) !important;
+  font-style: italic;
+}

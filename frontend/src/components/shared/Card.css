@@ -1,0 +1,108 @@
+/* Card Component Styles */
+
+.card {
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-xl);
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+/* Variants */
+.card-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-primary);
+}
+
+.card-solid {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+}
+
+.card-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-gradient {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.1) 0%, 
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Glow effects */
+.card-glow {
+  position: relative;
+}
+
+.card-glow-yellow {
+  box-shadow: 0 0 30px rgba(250, 204, 21, 0.2);
+}
+
+.card-glow-cyan {
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.2);
+}
+
+.card-glow-red {
+  box-shadow: 0 0 30px rgba(255, 70, 85, 0.2);
+}
+
+.card-glow-blue {
+  box-shadow: 0 0 30px rgba(79, 70, 229, 0.2);
+}
+
+.card-glow-lime {
+  box-shadow: 0 0 30px rgba(132, 204, 22, 0.2);
+}
+
+/* Hover effects */
+.card-hover:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-focus);
+}
+
+.card-glow-yellow.card-hover:hover {
+  box-shadow: 0 8px 40px rgba(250, 204, 21, 0.3);
+}
+
+.card-glow-cyan.card-hover:hover {
+  box-shadow: 0 8px 40px rgba(6, 182, 212, 0.3);
+}
+
+.card-glow-red.card-hover:hover {
+  box-shadow: 0 8px 40px rgba(255, 70, 85, 0.3);
+}
+
+.card-glow-blue.card-hover:hover {
+  box-shadow: 0 8px 40px rgba(79, 70, 229, 0.3);
+}
+
+/* Clickable state */
+.card-clickable {
+  cursor: pointer;
+}
+
+.card-clickable:active {
+  transform: translateY(-2px);
+}
+
+/* Padding variants */
+.card-compact {
+  padding: var(--spacing-md);
+}
+
+.card-spacious {
+  padding: var(--spacing-2xl);
+}
+
+/* Border variants */
+.card-no-border {
+  border: none;
+}
+
+.card-thick-border {
+  border-width: 2px;
+}

@@ -1,0 +1,226 @@
+/* Hot Takes Styles */
+
+.hot-takes-section {
+  width: 100%;
+}
+
+.hot-takes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: var(--spacing-xl);
+}
+
+.hot-take-card {
+  position: relative;
+  padding: var(--spacing-xl);
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.hot-take-card:hover {
+  border-color: var(--accent-lime);
+  box-shadow: 0 0 30px rgba(132, 204, 22, 0.2);
+}
+
+/* Difference Badge */
+.difference-badge {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: linear-gradient(135deg, rgba(132, 204, 22, 0.2), rgba(132, 204, 22, 0.1));
+  border: 2px solid var(--accent-lime);
+  border-radius: var(--radius-lg);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.difference-icon {
+  font-size: 1.25rem;
+}
+
+.difference-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--accent-lime);
+  line-height: 1;
+}
+
+.difference-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--accent-lime);
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+/* Fight Matchup */
+.hot-take-matchup {
+  margin-bottom: var(--spacing-xl);
+  padding-right: 80px;
+}
+
+.matchup-fighters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.matchup-fighters .fighter-name {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.matchup-fighters .vs-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.matchup-event {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Predictions Comparison */
+.predictions-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-md);
+}
+
+.prediction-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.prediction-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 100px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.label-icon {
+  font-size: 1rem;
+}
+
+.sciphr-prediction .prediction-label {
+  color: var(--accent-lime);
+}
+
+.vegas-prediction .prediction-label {
+  color: var(--text-tertiary);
+}
+
+.prediction-bar-container {
+  flex: 1;
+  position: relative;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.prediction-bar {
+  height: 100%;
+  border-radius: var(--radius-md);
+  transition: width var(--duration-slow) var(--ease-out);
+  position: relative;
+}
+
+.sciphr-bar {
+  background: linear-gradient(90deg, var(--accent-lime), rgba(132, 204, 22, 0.6));
+}
+
+.vegas-bar {
+  background: linear-gradient(90deg, var(--text-muted), rgba(100, 116, 139, 0.6));
+}
+
+.prediction-value {
+  position: absolute;
+  right: var(--spacing-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Pick */
+.hot-take-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: rgba(132, 204, 22, 0.1);
+  border-left: 3px solid var(--accent-lime);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.pick-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--accent-lime);
+  letter-spacing: 1px;
+}
+
+.pick-fighter {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Reasoning */
+.hot-take-reasoning {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.hot-take-reasoning p {
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hot-takes-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .hot-take-matchup {
+    padding-right: 0;
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .difference-badge {
+    position: relative;
+    top: 0;
+    right: 0;
+    margin-bottom: var(--spacing-md);
+    align-self: flex-start;
+  }
+  
+  .prediction-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .prediction-label {
+    min-width: auto;
+  }
+}

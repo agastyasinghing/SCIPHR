@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/sagas/.claude/skills/gstack/**)",
+      "Bash(./setup)",
+      "Skill(plan-eng-review)",
+      "Bash(rm:*)",
+      "Bash(robocopy \"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\" \"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\" /E /XD node_modules /NFL /NDL /NJH /NJS)",
+      "Bash(cmd /c \"xcopy /E /I /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\src\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\src\\\\\" && xcopy /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\index.html\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\\\\\\")",
+      "Bash(xcopy /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\vite.config.js\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\\\\\\" && xcopy /Y /Q \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend-redesign\\\\sciphr-redesign\\\\frontend-redesign\\\\package.json\\\\\" \\\\\"C:\\\\Users\\\\sagas\\\\sciphr\\\\frontend\\\\\\\\\"\" && echo \"DONE\")",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)"
+    ]
+  }
+}

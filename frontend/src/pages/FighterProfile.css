@@ -1,0 +1,272 @@
+/* Fighter Profile Page Styles */
+
+.fighter-profile-page {
+  padding: var(--spacing-3xl) 0;
+  min-height: 100vh;
+}
+
+.back-button {
+  margin-bottom: var(--spacing-xl);
+}
+
+/* Loading & Error States */
+.loading-state,
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-4xl);
+  gap: var(--spacing-lg);
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid var(--border-primary);
+  border-top-color: var(--accent-yellow);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.error-icon {
+  font-size: 4rem;
+}
+
+.error-state h2 {
+  font-size: 2rem;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.error-state p {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xl);
+}
+
+/* Fighter Header */
+.fighter-header {
+  padding: var(--spacing-3xl);
+  margin-bottom: var(--spacing-3xl);
+  background: linear-gradient(135deg, rgba(10, 14, 20, 0.95), rgba(26, 31, 46, 0.95));
+}
+
+.header-content {
+  display: flex;
+  gap: var(--spacing-3xl);
+  align-items: center;
+}
+
+.fighter-avatar-large {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 4px solid var(--accent-yellow);
+  box-shadow: 0 0 40px rgba(250, 204, 21, 0.3);
+  flex-shrink: 0;
+}
+
+.fighter-avatar-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fighter-header-info {
+  flex: 1;
+}
+
+.fighter-name-large {
+  font-size: 3rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent-yellow), var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: var(--spacing-lg);
+  line-height: 1.2;
+}
+
+.fighter-badges {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.weight-class-badge {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: 2px solid;
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.fighter-vitals {
+  display: flex;
+  gap: var(--spacing-xl);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.vital-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.vital-label {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vital-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.vital-divider {
+  width: 1px;
+  height: 40px;
+  background: var(--border-primary);
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-3xl);
+}
+
+.stat-card {
+  padding: var(--spacing-2xl);
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+}
+
+.striking-card:hover {
+  border-color: var(--accent-red);
+  box-shadow: 0 8px 30px rgba(239, 68, 68, 0.2);
+}
+
+.grappling-card:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 8px 30px rgba(6, 182, 212, 0.2);
+}
+
+.career-card:hover {
+  border-color: var(--accent-yellow);
+  box-shadow: 0 8px 30px rgba(250, 204, 21, 0.2);
+}
+
+.physical-card:hover {
+  border-color: var(--accent-lime);
+  box-shadow: 0 8px 30px rgba(132, 204, 22, 0.2);
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.stat-icon {
+  font-size: 2rem;
+}
+
+.stat-card-header h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.stat-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--accent-yellow);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .header-content {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .fighter-vitals {
+    justify-content: center;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .fighter-profile-page {
+    padding: var(--spacing-xl) 0;
+  }
+  
+  .fighter-header {
+    padding: var(--spacing-xl);
+  }
+  
+  .fighter-avatar-large {
+    width: 150px;
+    height: 150px;
+  }
+  
+  .fighter-name-large {
+    font-size: 2rem;
+  }
+  
+  .fighter-vitals {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+  
+  .vital-divider {
+    display: none;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .stat-card {
+    padding: var(--spacing-xl);
+  }
+}

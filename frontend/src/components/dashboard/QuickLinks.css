@@ -1,0 +1,85 @@
+/* Quick Links Styles */
+
+.quick-links-section {
+  margin-bottom: var(--spacing-3xl);
+}
+
+.quick-links-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.quick-link-card {
+  text-align: center;
+  padding: var(--spacing-2xl) var(--spacing-xl);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.quick-link-icon {
+  font-size: 3rem;
+  margin-bottom: var(--spacing-md);
+  transition: transform var(--duration-normal) var(--ease-default);
+}
+
+.quick-link-card:hover .quick-link-icon {
+  transform: scale(1.2);
+}
+
+.quick-link-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-primary);
+}
+
+.quick-link-description {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* Color variants */
+.quick-link-yellow:hover {
+  border-color: var(--accent-yellow);
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.2);
+}
+
+.quick-link-cyan:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+}
+
+.quick-link-lime:hover {
+  border-color: var(--accent-lime);
+  box-shadow: 0 0 20px rgba(132, 204, 22, 0.2);
+}
+
+.quick-link-orange:hover {
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.2);
+}
+
+@media (max-width: 768px) {
+  .quick-links-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+  }
+  
+  .quick-link-card {
+    padding: var(--spacing-xl) var(--spacing-md);
+  }
+  
+  .quick-link-icon {
+    font-size: 2.5rem;
+  }
+  
+  .quick-link-title {
+    font-size: 1rem;
+  }
+  
+  .quick-link-description {
+    font-size: 0.75rem;
+  }
+}

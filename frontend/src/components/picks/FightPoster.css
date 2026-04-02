@@ -1,0 +1,523 @@
+/* Fight Poster Styles - UFC Event Poster Design */
+
+.fight-poster-container {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* Main Poster Canvas */
+.fight-poster {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  border-radius: var(--radius-2xl);
+  overflow: hidden;
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.8),
+    inset 0 0 100px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(250, 204, 21, 0.2);
+  transition: all var(--duration-slow) var(--ease-default);
+}
+
+.fight-poster.has-prediction {
+  box-shadow: 
+    0 30px 80px rgba(250, 204, 21, 0.4),
+    inset 0 0 100px rgba(0, 0, 0, 0.5);
+  border-color: var(--accent-yellow);
+}
+
+/* Background Pattern */
+.poster-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255, 255, 255, 0.02) 35px, rgba(255, 255, 255, 0.02) 70px),
+    repeating-linear-gradient(-45deg, transparent, transparent 35px, rgba(0, 0, 0, 0.03) 35px, rgba(0, 0, 0, 0.03) 70px);
+  pointer-events: none;
+}
+
+/* Header */
+.poster-header {
+  position: relative;
+  z-index: 2;
+  padding: var(--spacing-2xl);
+  text-align: center;
+}
+
+.poster-logo {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: linear-gradient(135deg, var(--accent-yellow), var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: var(--spacing-sm);
+}
+
+.poster-event-title {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: 8px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  text-shadow: 
+    0 0 20px rgba(250, 204, 21, 0.5),
+    0 0 40px rgba(6, 182, 212, 0.3);
+}
+
+/* Fighters Section */
+.poster-fighters {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2xl);
+  padding: var(--spacing-3xl) var(--spacing-2xl);
+  min-height: 450px;
+}
+
+.poster-fighter {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  transition: all var(--duration-slow) var(--ease-default);
+}
+
+.poster-fighter.empty {
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.poster-fighter.empty:hover {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+/* Fighter Image */
+.fighter-image-container {
+  position: relative;
+  width: 250px;
+  height: 250px;
+  margin-bottom: var(--spacing-xl);
+}
+
+.fighter-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 4px solid var(--fighter-color);
+  box-shadow: var(--fighter-glow);
+  position: relative;
+  z-index: 2;
+  transition: all var(--duration-slow) var(--ease-default);
+}
+
+.poster-fighter.winner .fighter-image {
+  transform: scale(1.15);
+  filter: brightness(1.3);
+  animation: winnerPulse 2s ease-in-out infinite;
+}
+
+.poster-fighter.loser .fighter-image {
+  filter: grayscale(80%) brightness(0.5);
+  transform: scale(0.9);
+}
+
+@keyframes winnerPulse {
+  0%, 100% {
+    box-shadow: 0 0 40px var(--fighter-color);
+  }
+  50% {
+    box-shadow: 0 0 80px var(--fighter-color);
+  }
+}
+
+.fighter-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  opacity: 0.3;
+  filter: blur(40px);
+  z-index: 1;
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.5; }
+}
+
+/* Fighter Details */
+.fighter-details {
+  text-align: center;
+  z-index: 2;
+}
+
+.fighter-name {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: var(--spacing-sm);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+}
+
+.fighter-record {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-md);
+  font-family: 'Courier New', monospace;
+}
+
+.fighter-class {
+  display: inline-block;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 2px solid;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Empty Slot */
+.empty-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 250px;
+  height: 250px;
+  border: 3px dashed var(--border-primary);
+  border-radius: 50%;
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.poster-fighter.empty:hover .empty-slot {
+  border-color: var(--accent-yellow);
+  background: rgba(250, 204, 21, 0.05);
+}
+
+.empty-icon {
+  font-size: 4rem;
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-md);
+}
+
+.empty-text {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-align: center;
+  line-height: 1.4;
+  letter-spacing: 1px;
+}
+
+/* VS Container */
+.vs-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.vs-logo {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(6, 182, 212, 0.2));
+  border: 3px solid rgba(250, 204, 21, 0.5);
+  border-radius: 50%;
+  box-shadow: 
+    0 0 40px rgba(250, 204, 21, 0.4),
+    inset 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.vs-logo span {
+  font-size: 2.5rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent-yellow), var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 20px rgba(250, 204, 21, 0.5);
+}
+
+.vs-spark {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(250, 204, 21, 0.4), transparent 70%);
+  animation: sparkPulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sparkPulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Prediction Stamp */
+.prediction-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-5deg);
+  z-index: 10;
+  animation: stampAppear 0.5s ease-out;
+}
+
+@keyframes stampAppear {
+  0% {
+    transform: translate(-50%, -50%) rotate(-5deg) scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -50%) rotate(-5deg) scale(1.2);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(-5deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.stamp-border {
+  padding: var(--spacing-xs);
+  background: linear-gradient(135deg, var(--accent-yellow), var(--accent-cyan));
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+}
+
+.stamp-content {
+  background: var(--bg-primary);
+  padding: var(--spacing-2xl) var(--spacing-3xl);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  border: 2px dashed var(--accent-yellow);
+}
+
+.stamp-label {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--text-tertiary);
+  letter-spacing: 2px;
+  margin-bottom: var(--spacing-sm);
+}
+
+.stamp-winner {
+  font-size: 2rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent-yellow), var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+}
+
+.stamp-confidence {
+  font-size: 3rem;
+  font-weight: 900;
+  color: var(--accent-yellow);
+  line-height: 1;
+  margin-bottom: var(--spacing-sm);
+}
+
+.stamp-model {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+}
+
+/* Footer */
+.poster-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: var(--spacing-xl);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  text-align: center;
+  z-index: 2;
+}
+
+.poster-location {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.location-icon {
+  font-size: 1rem;
+}
+
+/* Action Buttons */
+.poster-actions {
+  margin-top: var(--spacing-2xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.analyze-btn {
+  min-width: 300px;
+  font-size: 1.125rem;
+}
+
+.poster-actions-row {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .poster-fighters {
+    gap: var(--spacing-md);
+  }
+  
+  .fighter-image-container {
+    width: 200px;
+    height: 200px;
+  }
+  
+  .fighter-name {
+    font-size: 1.5rem;
+  }
+  
+  .vs-logo {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .vs-logo span {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .fight-poster {
+    aspect-ratio: 9 / 16;
+  }
+  
+  .poster-fighters {
+    flex-direction: column;
+    gap: var(--spacing-xl);
+    padding: var(--spacing-xl);
+  }
+  
+  .vs-container {
+    order: 2;
+  }
+  
+  .poster-fighter.left {
+    order: 1;
+  }
+  
+  .poster-fighter.right {
+    order: 3;
+  }
+  
+  .fighter-image-container {
+    width: 180px;
+    height: 180px;
+  }
+  
+  .empty-slot {
+    width: 180px;
+    height: 180px;
+  }
+  
+  .stamp-content {
+    padding: var(--spacing-lg) var(--spacing-xl);
+  }
+  
+  .stamp-winner {
+    font-size: 1.5rem;
+  }
+  
+  .stamp-confidence {
+    font-size: 2rem;
+  }
+}
+
+/* AI Poster Button - BIGGER */
+.ai-poster-btn {
+  background: linear-gradient(135deg, #FACC15, #F59E0B) !important;
+  border: none !important;
+  box-shadow: 0 0 30px rgba(250, 204, 21, 0.4) !important;
+  animation: glow 2s ease-in-out infinite;
+  padding: var(--spacing-lg) var(--spacing-3xl) !important;
+  font-size: 1.25rem !important;
+  margin: var(--spacing-xl) 0 !important;
+}
+
+.ai-poster-btn:hover {
+  transform: scale(1.05) !important;
+  box-shadow: 0 0 50px rgba(250, 204, 21, 0.8) !important;
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 30px rgba(250, 204, 21, 0.4); }
+  50% { box-shadow: 0 0 50px rgba(250, 204, 21, 0.8); }
+}
+
+/* Upgrade Message */
+.upgrade-message {
+  text-align: center;
+  padding: var(--spacing-xl);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--accent-red);
+  border-radius: var(--radius-lg);
+  margin: var(--spacing-lg) 0;
+}
+
+.upgrade-message p {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Poster Toggle */
+.poster-toggle {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.style-badge {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(250, 204, 21, 0.1);
+  border: 1px solid var(--accent-yellow);
+  border-radius: var(--radius-md);
+  color: var(--accent-yellow);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
