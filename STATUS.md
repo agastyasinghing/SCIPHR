@@ -40,9 +40,9 @@ Nothing — Phase 0 complete, ready for Phase 1.
 ---
 
 ## Next 3 Tasks
-1. git init + create GitHub repo (run: `git init && git add . && git commit -m "Phase 0: P0 bug fixes and git setup"`)
-2. Create PostgreSQL schema (fights, fighters, events, predictions_log, odds_history)
-3. Write CSV → PostgreSQL migration script
+1. Create PostgreSQL schema (fights, fighters, events, predictions_log, odds_history) — read PRD §11 first
+2. Write CSV → PostgreSQL migration script (`backend/scripts/migrate_csv.py`)
+3. Update backend to query PostgreSQL instead of CSV (`backend/main.py` fighter lookup + /fighters endpoint)
 
 ---
 
@@ -63,6 +63,9 @@ Nothing — Phase 0 complete, ready for Phase 1.
 | No same-fighter validation | ✅ Fixed | main.py /predict (HTTP 400) |
 | No rate limiting on AI poster | ✅ Fixed | main.py slowapi 3/hr/IP |
 | gemini_service.py startup crash | ✅ Fixed | gemini_service.py (Bug 13, unlisted) |
+| CORS wildcards (audit gap) | ✅ Fixed | main.py — allow_methods/headers/credentials locked down per PRD §14 |
+| alert() in FightPoster.jsx (audit gap) | ✅ Fixed | FightPoster.jsx — replaced with aiPosterError inline state |
+| .env.example missing (audit gap) | ✅ Fixed | backend/.env.example created with rotation checklist |
 
 ---
 
