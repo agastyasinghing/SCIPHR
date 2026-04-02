@@ -26,6 +26,7 @@ const FightPoster = ({
   const [generatingAI, setGeneratingAI] = useState(false);
   const [showAIPoster, setShowAIPoster] = useState(false);
   const [aiGenerationsLeft, setAiGenerationsLeft] = useState(1);
+  const [aiPosterError, setAiPosterError] = useState(null);
   
   // Analyst Mode state
   const [showAnalystMode, setShowAnalystMode] = useState(false);
@@ -68,7 +69,8 @@ const FightPoster = ({
     if (!fighter1 || !fighter2 || !prediction) return;
     
     setGeneratingAI(true);
-    
+    setAiPosterError(null);
+
     try {
       const data = await api.request('/generate-ai-poster', {
         method: 'POST',
@@ -90,11 +92,11 @@ const FightPoster = ({
         console.log('AI Poster generated:', data);
       } else {
         console.error('AI Poster generation failed:', data.error);
-        alert('Failed to generate AI poster. Please try again.');
+        setAiPosterError('Failed to generate AI poster. Please try again.');
       }
     } catch (error) {
       console.error('AI Poster error:', error);
-      alert('Error generating AI poster. Please try again.');
+      setAiPosterError('Error generating AI poster. Please try again.');
     } finally {
       setGeneratingAI(false);
     }
@@ -322,6 +324,12 @@ const FightPoster = ({
               </Button>
             )}
             
+            {aiPosterError && (
+              <div className="ai-poster-error" style={{ color: '#EF4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                {aiPosterError}
+              </div>
+            )}
+
             {!showAIPoster && aiGenerationsLeft === 0 && (
               <div className="upgrade-message">
                 <p>🔒 Out of free AI poster generations today</p>
