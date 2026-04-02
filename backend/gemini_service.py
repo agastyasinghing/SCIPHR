@@ -6,7 +6,6 @@ Uses OAuth service account authentication
 
 import os
 import random
-import base64
 import requests
 from dotenv import load_dotenv
 
