@@ -25,7 +25,12 @@
       "Bash(python -c ':*)",
       "Bash(git merge:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(python -c \"from db.models import Base, Fighter, Fight, Event, EventFight, PredictionLog, OddsHistory, NarrativeOutcome; tables = list\\(Base.metadata.tables.keys\\(\\)\\); print\\('Tables:', tables\\); print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(/c/Users/sagas/sciphr/venv/Scripts/python.exe -m pytest tests/ -v)"
     ]
   }
 }
