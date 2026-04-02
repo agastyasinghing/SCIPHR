@@ -17,56 +17,54 @@ class UFCFightPredictorGolden:
     Predicts UFC fight outcomes using golden dataset model (5,401 features)
     """
     
-    def __init__(self, model_path='models/golden_model.pkl', data_path='data/golden_full_converted.csv'):
+    def __init__(self, model_path='models/golden_model.pkl', engine=None):
         """
-        Initialize predictor with golden model
+        Initialize predictor with golden model and a SQLAlchemy Engine.
+        engine must be provided; the CSV data_path is no longer used.
         """
         print("="*70)
         print("UFC FIGHT PREDICTOR - GOLDEN MODEL")
         print("5,401 Features | 85.7% Test Accuracy on UFC 320")
         print("="*70)
-        
+
         # Load the trained model
         print("\nLoading model...")
         with open(model_path, 'rb') as f:
             model_data = pickle.load(f)
-        
+
         self.model = model_data['model']
         self.model_name = model_data['model_name']
         self.accuracy = model_data['accuracy']
         self.test_accuracy = model_data.get('test_accuracy', None)
         self.feature_count = model_data['feature_count']
         self.feature_names = model_data['feature_names']
-        
+
         print(f"✓ Loaded model: {self.model_name}")
         print(f"✓ Training accuracy: {self.accuracy:.2%}")
         if self.test_accuracy:
             print(f"✓ Test accuracy (UFC 320): {self.test_accuracy:.2%}")
         print(f"✓ Features: {self.feature_count}")
-        
-        # Initialize feature calculator
-        print("\nInitializing feature calculator...")
-        self.feature_calculator = GoldenFeatureCalculator(data_path)
-        
-        # Build list of available fighters
+
+        # Initialize DB-backed feature calculator
+        print("\nInitializing feature calculator (DB)...")
+        self.feature_calculator = GoldenFeatureCalculator(engine)
+
+        # Build list of available fighters (cached in memory for fast search)
         print("\nBuilding fighter list...")
         self.available_fighters = self._build_fighter_list()
         print(f"✓ {len(self.available_fighters)} fighters available")
-        
+
         print("="*70)
         print("\n✓ Ready to predict!\n")
     
     def _build_fighter_list(self):
-        """Get list of all fighters in dataset"""
-        fighters = set()
-        
-        r_fighters = self.feature_calculator.data['r_name'].dropna().unique()
-        b_fighters = self.feature_calculator.data['b_name'].dropna().unique()
-        
-        fighters.update(r_fighters)
-        fighters.update(b_fighters)
-        
-        return sorted(list(fighters))
+        """Get sorted list of all fighters from the DB (cached at startup)."""
+        from sqlalchemy import text
+        with self.feature_calculator.engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT name FROM fighters ORDER BY name")
+            ).fetchall()
+        return [row[0] for row in rows]
     
     def search_fighter(self, name):
         """Search for a fighter by name (fuzzy matching)"""

@@ -1,227 +1,279 @@
 """
-Golden Feature Calculator - SIMPLIFIED
-Just extracts pre-calculated features from the dataset
+DB-backed feature calculator for SCIPHR (Phase 1+).
+
+Replaces the CSV/pandas data-loading approach with two indexed DB queries
+per prediction.  The public interface is unchanged — predictor_golden.py
+calls the same get_latest_fighter_stats() and build_full_feature_vector()
+methods it always did.
+
+Data flow for build_full_feature_vector():
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  fighters table (DB)                                             │
+  │    fighter1 row → latest_features  (canonical r_* form)         │
+  │    fighter2 row → latest_features  (canonical r_* form)         │
+  └─────────────────────┬────────────────────────┬───────────────────┘
+                        │                        │
+                 used directly               remapped:
+                 as r_* in all_stats         r_* → b_*, *_r → *_b
+                        │                        │
+                        └──────────┬─────────────┘
+                                   ▼
+                         _calculate_differences()
+                         adds diff_STAT = r_STAT - b_STAT
+                                   ▼
+                         assemble 5,401-feature vector
+                         in model-expected order
+                                   ▼
+                         XGBoost.predict()
+
+Feature pre-normalization (done at migration time in migrate_csv.py):
+  All features in latest_features use canonical r_* / *_r keys regardless
+  of which corner the fighter was actually in.  was_red is stored in the
+  DB for debugging and mutual-exclusion edge-case detection only.
 """
 
-import pandas as pd
+import json
+import logging
+from typing import Optional
+
 import numpy as np
+import pandas as pd
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
+
+log = logging.getLogger(__name__)
+
+
+def _parse_json(val) -> dict:
+    """
+    Ensure a value from a JSON/JSONB column is a Python dict.
+    PostgreSQL returns dicts directly; SQLite returns raw JSON strings.
+    """
+    if val is None:
+        return {}
+    if isinstance(val, str):
+        return json.loads(val)
+    return val
+
 
 class GoldenFeatureCalculator:
     """
-    Extracts features from golden dataset (features already calculated)
+    Extracts fighter features from PostgreSQL instead of CSV.
+    Initialized with a SQLAlchemy Engine (sync, psycopg2).
     """
-    
-    def __init__(self, data_path='data/golden_full_converted.csv'):
-        """Load the full golden dataset"""
-        print("Loading golden dataset for feature calculation...")
-        self.data = pd.read_csv(data_path)
-        self.data['date'] = pd.to_datetime(self.data['date'])
-        print(f"✓ Loaded {len(self.data)} fights with {len(self.data.columns)} columns")
-    
-    def get_latest_fighter_stats(self, fighter_name):
+
+    def __init__(self, engine: Engine) -> None:
+        self.engine = engine
+        log.info("GoldenFeatureCalculator initialised (DB-backed)")
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    def get_latest_fighter_stats(self, fighter_name: str) -> dict:
         """
-        Get fighter's most recent base stats (from their last fight)
+        Return base profile stats for a fighter as a dict with the original
+        CSV key names expected by main.py and predictor_golden.py callers.
+        Returns {} if the fighter is not found.
+
+        Key mapping (DB column → CSV key):
+          wins     → fighter_w       slpm    → fighter_SlpM
+          losses   → fighter_l       str_acc → fighter_Str_Acc
+          draws    → fighter_d       str_def → fighter_Str_Def
+          age      → age             td_avg  → fighter_TD_Avg
+          height_cm→ fighter_height_cm  ...
         """
-        # Find most recent fight
-        recent = self.data[
-            (self.data['r_name'] == fighter_name) | 
-            (self.data['b_name'] == fighter_name)
-        ].sort_values('date', ascending=False)
-        
-        if len(recent) == 0:
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT * FROM fighters WHERE name = :name"),
+                {"name": fighter_name},
+            ).fetchone()
+
+        if row is None:
+            log.debug("get_latest_fighter_stats: '%s' not found", fighter_name)
             return {}
-        
-        fight = recent.iloc[0]
-        
-        # Determine which corner
-        if fight['r_name'] == fighter_name:
-            prefix = 'r_'
-        else:
-            prefix = 'b_'
-        
-        # Extract all stats
-        stats = {}
-        for col in fight.index:
-            if col.startswith(prefix):
-                stat_name = col[2:]  # Remove r_ or b_ prefix
-                stats[stat_name] = fight[col]
-        
-        return stats
-    
-    def build_full_feature_vector(self, fighter1_name, fighter2_name, feature_names):
+
+        m = row._mapping
+        return {
+            "fighter_w":          float(m.get("wins", 0) or 0),
+            "fighter_l":          float(m.get("losses", 0) or 0),
+            "fighter_d":          float(m.get("draws", 0) or 0),
+            "age":                float(m.get("age", 0) or 0),
+            "fighter_height_cm":  float(m.get("height_cm", 0) or 0),
+            "fighter_reach_cm":   float(m.get("reach_cm", 0) or 0),
+            "fighter_weight_lbs": float(m.get("weight_lbs", 185) or 185),
+            "fighter_SlpM":       float(m.get("slpm", 0) or 0),
+            "fighter_Str_Acc":    float(m.get("str_acc", 0) or 0),
+            "fighter_Str_Def":    float(m.get("str_def", 0) or 0),
+            "fighter_TD_Avg":     float(m.get("td_avg", 0) or 0),
+            "fighter_TD_Acc":     float(m.get("td_acc", 0) or 0),
+            "fighter_TD_Def":     float(m.get("td_def", 0) or 0),
+            "fighter_Sub_Avg":    float(m.get("sub_avg", 0) or 0),
+            "knockdowns":         0.0,  # not stored in Phase 1; Phase 2 adds it
+        }
+
+    def build_full_feature_vector(
+        self,
+        fighter1_name: str,
+        fighter2_name: str,
+        feature_names: list,
+    ) -> Optional[list]:
         """
-        Build complete 5,401 feature vector for a matchup
-        CRITICAL: Must exclude fights where both fighters appear together!
+        Build the 5,401-element feature vector expected by the XGBoost model.
+
+        fighter1 is placed in the red corner; fighter2 in the blue corner.
+        Returns None if either fighter is missing from the DB.
+
+        Steps:
+          1. Fetch latest_features for both fighters (2 indexed PK queries).
+          2. Warn if mutual-exclusion edge case is detected.
+          3. Load fighter1's features directly into all_stats (r_* keys).
+          4. Remap fighter2's features from r_* → b_* into all_stats.
+          5. Compute diff_STAT = r_STAT − b_STAT via _calculate_differences().
+          6. Build ordered vector from feature_names (0.0 for missing).
         """
-        print(f"\n🔧 Building full feature vector for {fighter1_name} vs {fighter2_name}...")
-        
-        # Find most recent fights for each fighter
-        # EXCLUDING any fight where they faced each other
-        f1_fights = self.data[
-            ((self.data['r_name'] == fighter1_name) | (self.data['b_name'] == fighter1_name))
-        ].sort_values('date', ascending=False)
-        
-        f2_fights = self.data[
-            ((self.data['r_name'] == fighter2_name) | (self.data['b_name'] == fighter2_name))
-        ].sort_values('date', ascending=False)
-        
-        # Exclude fights where BOTH fighters appear
-        f1_fights = f1_fights[
-            ~((f1_fights['r_name'] == fighter2_name) | (f1_fights['b_name'] == fighter2_name))
-        ]
-        
-        f2_fights = f2_fights[
-            ~((f2_fights['r_name'] == fighter1_name) | (f2_fights['b_name'] == fighter1_name))
-        ]
-        
-        if len(f1_fights) == 0:
-            print(f"   ✗ No fights found for {fighter1_name}")
+        with self.engine.connect() as conn:
+            f1_row = conn.execute(
+                text(
+                    "SELECT latest_features, last_fight_opp, name "
+                    "FROM fighters WHERE name = :name"
+                ),
+                {"name": fighter1_name},
+            ).fetchone()
+            f2_row = conn.execute(
+                text(
+                    "SELECT latest_features, last_fight_opp, name "
+                    "FROM fighters WHERE name = :name"
+                ),
+                {"name": fighter2_name},
+            ).fetchone()
+
+        if f1_row is None:
+            log.warning("build_full_feature_vector: fighter not found: '%s'", fighter1_name)
             return None
-        
-        if len(f2_fights) == 0:
-            print(f"   ✗ No fights found for {fighter2_name}")
+        if f2_row is None:
+            log.warning("build_full_feature_vector: fighter not found: '%s'", fighter2_name)
             return None
-        
-        # Get most recent fight for each
-        f1_fight = f1_fights.iloc[0]
-        f2_fight = f2_fights.iloc[0]
-        
-        # Determine which corner each fighter was in their last fight
-        f1_was_red = (f1_fight['r_name'] == fighter1_name)
-        f2_was_red = (f2_fight['r_name'] == fighter2_name)
-        
-        print(f"   Fighter 1 most recent: {f1_fight['r_name']} vs {f1_fight['b_name']} ({f1_fight['date'].strftime('%Y-%m-%d')})")
-        print(f"   Fighter 1 was in: {'RED' if f1_was_red else 'BLUE'} corner in that fight")
-        
-        print(f"   Fighter 2 most recent: {f2_fight['r_name']} vs {f2_fight['b_name']} ({f2_fight['date'].strftime('%Y-%m-%d')})")
-        print(f"   Fighter 2 was in: {'RED' if f2_was_red else 'BLUE'} corner in that fight")
-        
-        # Build feature dictionary
-        all_stats = {}
-        
-        # Extract fighter1's stats and map to RED corner
-        f1_prefix = 'r_' if f1_was_red else 'b_'
-        f1_suffix = '_r' if f1_was_red else '_b'
-        
-        print(f"\n   DEBUG - Fighter 1 extraction:")
-        print(f"   f1_prefix: {f1_prefix}, f1_suffix: {f1_suffix}")
-        f1_extracted = 0
-        
-        for col in f1_fight.index:
-            # Get all stats for fighter1 (whether they were red or blue)
-            if col.startswith(f1_prefix):
-                # Prefix-based column (r_fighter_w, b_fighter_w, etc)
-                new_col = 'r_' + col[len(f1_prefix):]
-                all_stats[new_col] = f1_fight[col]
-                f1_extracted += 1
-                if f1_extracted <= 3:
-                    print(f"   {col} -> {new_col} = {f1_fight[col]}")
-            elif col.endswith(f1_suffix):
-                # Suffix-based column (wins_3_r, wins_3_b, etc)
-                base_name = col[:-len(f1_suffix)]
-                new_col = base_name + '_r'
-                all_stats[new_col] = f1_fight[col]
-                f1_extracted += 1
-        
-        print(f"   Extracted {f1_extracted} columns for fighter 1")
-        
-        # Extract fighter2's stats and map to BLUE corner
-        f2_prefix = 'r_' if f2_was_red else 'b_'
-        f2_suffix = '_r' if f2_was_red else '_b'
-        
-        print(f"\n   DEBUG - Fighter 2 extraction:")
-        print(f"   f2_prefix: {f2_prefix}, f2_suffix: {f2_suffix}")
-        f2_extracted = 0
-        
-        for col in f2_fight.index:
-            # Get all stats for fighter2 (whether they were red or blue)
-            if col.startswith(f2_prefix):
-                # Prefix-based column
-                new_col = 'b_' + col[len(f2_prefix):]
-                all_stats[new_col] = f2_fight[col]
-                f2_extracted += 1
-                if f2_extracted <= 3:
-                    print(f"   {col} -> {new_col} = {f2_fight[col]}")
-            elif col.endswith(f2_suffix):
-                # Suffix-based column
-                base_name = col[:-len(f2_suffix)]
-                new_col = base_name + '_b'
-                all_stats[new_col] = f2_fight[col]
-                f2_extracted += 1
-        
-        print(f"   Extracted {f2_extracted} columns for fighter 2")
-        
-        # FINAL CHECK
-        print(f"\n   FINAL STATS CHECK:")
-        print(f"   r_fighter_w (should be {fighter1_name}): {all_stats.get('r_fighter_w', 'MISSING')}")
-        print(f"   b_fighter_w (should be {fighter2_name}): {all_stats.get('b_fighter_w', 'MISSING')}")
-        
-        # Calculate matchup-specific difference features
-        print("\n   Calculating matchup-specific difference features...")
+
+        # Mutual-exclusion edge case: fighter1's last fight was against fighter2.
+        # Features are pre-computed and include context from that matchup.
+        if f1_row.last_fight_opp and f1_row.last_fight_opp == fighter2_name:
+            log.warning(
+                "Mutual-exclusion: %s's most recent fight was against %s. "
+                "Pre-computed features may include context from their last matchup.",
+                fighter1_name,
+                fighter2_name,
+            )
+
+        f1_features: dict = _parse_json(f1_row.latest_features)
+        f2_features: dict = _parse_json(f2_row.latest_features)
+
+        all_stats: dict = {}
+
+        # ── Fighter 1 → red corner ─────────────────────────────────────────
+        # latest_features already in canonical r_* form; use directly.
+        all_stats.update(f1_features)
+        log.debug(
+            "Fighter 1 (%s): loaded %d features into red corner",
+            fighter1_name,
+            len(f1_features),
+        )
+
+        # ── Fighter 2 → blue corner ────────────────────────────────────────
+        # Remap r_* → b_*,  *_r → *_b
+        f2_count = 0
+        for key, val in f2_features.items():
+            if key.startswith("r_"):
+                all_stats["b_" + key[2:]] = val
+                f2_count += 1
+            elif key.endswith("_r") and not key.startswith("r_"):
+                all_stats[key[:-2] + "_b"] = val
+                f2_count += 1
+        log.debug(
+            "Fighter 2 (%s): remapped %d features into blue corner",
+            fighter2_name,
+            f2_count,
+        )
+
+        log.debug(
+            "FINAL CHECK — r_fighter_w (should be %s): %s | b_fighter_w (should be %s): %s",
+            fighter1_name,
+            all_stats.get("r_fighter_w", "MISSING"),
+            fighter2_name,
+            all_stats.get("b_fighter_w", "MISSING"),
+        )
+
+        # ── Matchup-specific difference features ──────────────────────────
         self._calculate_differences(all_stats)
-        
-        # Convert to DataFrame
+
+        # ── Assemble feature vector in model-expected order ────────────────
         temp_df = pd.DataFrame([all_stats])
-        
-        # Convert string columns to numeric
-        object_cols = temp_df.select_dtypes(include=['object']).columns
+
+        # String columns → categorical codes (same as original implementation)
+        object_cols = temp_df.select_dtypes(include=["object"]).columns
         for col in object_cols:
             temp_df[col] = pd.Categorical(temp_df[col]).codes
-        
-        # Extract features in correct order
+
         feature_vector = []
         missing_count = 0
-        
         for feature_name in feature_names:
             if feature_name in temp_df.columns:
                 val = temp_df[feature_name].iloc[0]
-                if pd.notna(val) and np.isfinite(val):
+                if pd.notna(val) and np.isfinite(float(val)):
                     feature_vector.append(float(val))
                 else:
                     feature_vector.append(0.0)
             else:
                 feature_vector.append(0.0)
                 missing_count += 1
-        
+
         non_zero = sum(1 for f in feature_vector if f != 0)
-        print(f"   ✓ Built {len(feature_vector)} features ({non_zero} non-zero, {missing_count} missing)")
-        
+        log.debug(
+            "Built %d features (%d non-zero, %d missing/defaulted)",
+            len(feature_vector),
+            non_zero,
+            missing_count,
+        )
+
         return feature_vector
-    
-    def _calculate_differences(self, all_stats):
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _calculate_differences(self, all_stats: dict) -> None:
         """
-        Calculate difference features between red and blue fighters
-        Format: diff_STAT = r_STAT - b_STAT
+        Add diff_STAT = r_STAT − b_STAT for every paired r_*/b_* stat.
+        Operates in-place on all_stats.  Unchanged from the original CSV
+        implementation — the dict-based input is data-source agnostic.
         """
-        # Find all r_ stats
-        r_stats = {k: v for k, v in all_stats.items() if k.startswith('r_')}
-        
+        # Prefix-based pairs  (r_fighter_w / b_fighter_w → diff_fighter_w)
+        r_stats = {k: v for k, v in all_stats.items() if k.startswith("r_")}
         for r_key, r_val in r_stats.items():
-            # Get corresponding blue stat
-            b_key = r_key.replace('r_', 'b_', 1)
-            
+            b_key = "b_" + r_key[2:]
             if b_key in all_stats:
                 b_val = all_stats[b_key]
-                
-                # Calculate difference if both are numeric
-                if pd.api.types.is_numeric_dtype(type(r_val)) and pd.api.types.is_numeric_dtype(type(b_val)):
-                    if pd.notna(r_val) and pd.notna(b_val):
-                        # Create diff column name
-                        stat_name = r_key[2:]  # Remove 'r_' prefix
-                        diff_key = f'diff_{stat_name}'
-                        all_stats[diff_key] = r_val - b_val
-        
-        # Also handle _r and _b suffixes
-        r_suffix_stats = {k: v for k, v in all_stats.items() if k.endswith('_r')}
-        
+                if (
+                    pd.api.types.is_numeric_dtype(type(r_val))
+                    and pd.api.types.is_numeric_dtype(type(b_val))
+                    and pd.notna(r_val)
+                    and pd.notna(b_val)
+                ):
+                    all_stats["diff_" + r_key[2:]] = r_val - b_val
+
+        # Suffix-based pairs  (wins_3_r / wins_3_b → diff_wins_3)
+        r_suffix_stats = {
+            k: v for k, v in all_stats.items()
+            if k.endswith("_r") and not k.startswith("r_")
+        }
         for r_key, r_val in r_suffix_stats.items():
-            b_key = r_key[:-2] + '_b'  # Replace _r with _b
-            
+            b_key = r_key[:-2] + "_b"
             if b_key in all_stats:
                 b_val = all_stats[b_key]
-                
-                if pd.api.types.is_numeric_dtype(type(r_val)) and pd.api.types.is_numeric_dtype(type(b_val)):
-                    if pd.notna(r_val) and pd.notna(b_val):
-                        stat_name = r_key[:-2]  # Remove '_r' suffix
-                        diff_key = f'diff_{stat_name}'
-                        all_stats[diff_key] = r_val - b_val
+                if (
+                    pd.api.types.is_numeric_dtype(type(r_val))
+                    and pd.api.types.is_numeric_dtype(type(b_val))
+                    and pd.notna(r_val)
+                    and pd.notna(b_val)
+                ):
+                    all_stats["diff_" + r_key[:-2]] = r_val - b_val

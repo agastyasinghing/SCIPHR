@@ -1,4 +1,6 @@
 aiohappyeyeballs==2.6.1
+psycopg2-binary==2.9.10
+SQLAlchemy==2.0.41
 aiohttp==3.13.3
 aiosignal==1.4.0
 annotated-types==0.7.0

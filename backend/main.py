@@ -7,6 +7,7 @@ import numpy as np
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import create_engine, text
 from gemini_service import generate_ai_poster
 
 # TODO (Phase 6): Switch limiter storage to Redis (Upstash).
@@ -33,22 +34,34 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
-# Global predictor
+# Global predictor and DB engine
 predictor = None
+engine = None
 
 @app.on_event("startup")
 async def startup_event():
-    global predictor
+    global predictor, engine
+
+    # ── Database ──────────────────────────────────────────────────────────
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL environment variable not set")
+
+    engine = create_engine(database_url, pool_pre_ping=True)
+
+    # Fail fast on misconfigured DATABASE_URL (SELECT 1 health check)
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    print("✓ Database connection verified")
+
+    # ── Model ─────────────────────────────────────────────────────────────
     print("Loading GOLDEN predictor...")
-    
-    # Import GOLDEN predictor
-    import sys
     sys.path.insert(0, '../src')
     from predictor_golden import UFCFightPredictorGolden
-    
+
     predictor = UFCFightPredictorGolden(
         model_path='../models/golden_model.pkl',
-        data_path='../data/golden_full_converted.csv'
+        engine=engine,
     )
     print("GOLDEN predictor loaded and ready!")
 
@@ -241,7 +254,26 @@ async def predict_fight(request: PredictionRequest):
         print(f"Response built successfully!")
         print(f"Confidence value: {response['confidence']}")
         print(f"{'='*70}\n")
-        
+
+        # Log every prediction — non-negotiable per CLAUDE.md.
+        # try/except ensures a DB failure here never fails the response.
+        try:
+            from db.models import PredictionLog
+            with engine.begin() as conn:
+                from sqlalchemy import insert
+                conn.execute(
+                    insert(PredictionLog).values(
+                        fighter1=response["fighter1"],
+                        fighter2=response["fighter2"],
+                        winner=response["winner"],
+                        confidence=response["confidence"],
+                        prob_f1=response["prob_fighter1"],
+                        prob_f2=response["prob_fighter2"],
+                    )
+                )
+        except Exception as log_err:
+            print(f"predictions_log INSERT failed (non-fatal): {log_err}")
+
         return response
         
     except Exception as e:

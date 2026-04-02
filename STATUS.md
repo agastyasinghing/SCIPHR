@@ -8,7 +8,7 @@
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 0 — P0 Bugs + Git Setup | ✅ Complete | All 13 bugs fixed, 7/7 tests passing |
-| Phase 1 — Database Migration | 🔴 Not Started | CSV → PostgreSQL |
+| Phase 1 — Database Migration | 🟡 In Progress | CSV → PostgreSQL |
 | Phase 2 — Intelligence Engine | 🔴 Not Started | All scoring modules |
 | Phase 3 — API Layer | 🔴 Not Started | Wire intelligence to FastAPI |
 | Phase 4 — Frontend Wiring | 🔴 Not Started | api.js + UI components |
@@ -35,14 +35,14 @@
 ---
 
 ## In Progress
-Nothing — Phase 0 complete, ready for Phase 1.
+Phase 1 — Database Migration (code complete, awaiting migration run against real Supabase DB).
 
 ---
 
 ## Next 3 Tasks
-1. Create PostgreSQL schema (fights, fighters, events, predictions_log, odds_history) — read PRD §11 first
-2. Write CSV → PostgreSQL migration script (`backend/scripts/migrate_csv.py`)
-3. Update backend to query PostgreSQL instead of CSV (`backend/main.py` fighter lookup + /fighters endpoint)
+1. Create Supabase project + get DATABASE_URL → add to `backend/.env`
+2. Run `cd backend && python scripts/migrate_csv.py --csv ../data/golden_full_converted.csv`
+3. Smoke-test: start backend, hit /fighters and /predict, verify predictions_log row appears in Supabase
 
 ---
 
@@ -85,6 +85,10 @@ Nothing — Phase 0 complete, ready for Phase 1.
 | Apr 2026 | Nickname fix: remove from JSX | No nickname field in backend; Phase 2 adds it properly |
 | Apr 2026 | Rate limiter storage: in-memory for v1 | Redis (Upstash) deferred to Phase 6 |
 | Apr 2026 | fastapi upgraded 0.104.1 → 0.135.3 | starlette 0.27 incompatible with httpx 0.28 in venv |
+| Apr 2026 | Feature storage: JSONB per fighter (not per fight) | Per-fight JSONB ~912MB exceeds Supabase free tier; per-fighter ~85MB |
+| Apr 2026 | Features stored in canonical r_* form | Eliminates was_red branch at prediction time; simplifies build_full_feature_vector |
+| Apr 2026 | Sync SQLAlchemy + psycopg2 (not asyncpg) | Prediction pipeline is sync Python; FastAPI threadpools sync calls automatically |
+| Apr 2026 | Schema via create_all(), Alembic deferred to Phase 6 | Schema stable after Phase 1; see TODOS.md TODO-01 |
 
 ---
 
@@ -101,13 +105,16 @@ Nothing — Phase 0 complete, ready for Phase 1.
 | Module | Tests Written | Passing |
 |---|---|---|
 | P0 bugs (same-fighter, rate limit, NameError) | Yes | 7/7 ✅ |
+| GoldenFeatureCalculator (DB-backed) | Yes | 7/7 ✅ |
+| migrate_csv.py | Yes | 4/4 ✅ |
+| predictions_log insert | Yes | 1/1 ✅ |
 
 ---
 
 ## Notes for Next Session
-- Read CLAUDE.md first
-- Run `git init && git add . && git commit -m "Phase 0: P0 bug fixes and git setup"` before anything else
-- Rotate Google service account key before running backend
-- Create `backend/.env` with new Google credentials
-- Phase 1 starts with PostgreSQL schema creation — read PRD §6 (Data Layer) first
+- Phase 1 code is complete. Next step is running the migration against a real Supabase DB.
+- Create Supabase project → Settings → Database → Connection string → add to `backend/.env` as DATABASE_URL
+- Run migration: `cd backend && python scripts/migrate_csv.py --csv ../data/golden_full_converted.csv`
+- Run tests first to confirm no regressions: `cd backend && python -m pytest tests/ -v`
 - The 380MB CSV (`data/golden_full_converted.csv`) is in .gitignore — never commit it
+- After migration runs and smoke tests pass, mark Phase 1 ✅ in STATUS.md
