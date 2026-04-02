@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../../api/api';
 import './AnalystMode.css';
 import { 
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, 
@@ -24,15 +25,13 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
   const fetchDetailedStats = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/detailed-stats', {
+      const data = await api.request('/detailed-stats', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fighter1_name: fighter1.name,
           fighter2_name: fighter2.name
         })
       });
-      const data = await response.json();
       setDetailedStats(data);
     } catch (error) {
       console.error('Error fetching detailed stats:', error);
@@ -102,7 +101,6 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
           <img src={`/fighters/${fighter1.name.replace(/ /g, '_')}.png`} alt={fighter1.name} />
           <div className="fighter-info">
             <h3>{fighter1.name}</h3>
-            <p className="nickname">"{fighter1.stats.nickname}"</p>
             <p className="record">{Math.round(fighter1.stats.wins_total)}-{Math.round(fighter1.stats.losses_total)}-{Math.round(fighter1.stats.draw)}</p>
           </div>
         </div>
@@ -110,7 +108,6 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
         <div className="analyst-fighter right">
           <div className="fighter-info">
             <h3>{fighter2.name}</h3>
-            <p className="nickname">"{fighter2.stats.nickname}"</p>
             <p className="record">{Math.round(fighter2.stats.wins_total)}-{Math.round(fighter2.stats.losses_total)}-{Math.round(fighter2.stats.draw)}</p>
           </div>
           <img src={`/fighters/${fighter2.name.replace(/ /g, '_')}.png`} alt={fighter2.name} />

@@ -112,4 +112,26 @@ class APIService {
    */
   async getUpcomingEvents() {
     // TODO: Implement when backend endpoint is ready
-    return this.request('/events/
+    return this.request('/events/upcoming');
+  }
+  
+  /**
+   * Get past events
+   */
+  async getPastEvents() {
+    // TODO: Implement when backend endpoint is ready
+    return this.request('/events/past');
+  }
+  
+  /**
+   * Get model performance stats
+   */
+  async getModelPerformance() {
+    // TODO: Implement when backend endpoint is ready
+    return this.request('/model/performance');
+  }
+}
+
+// Export singleton instance
+export const api = new APIService();
+export default api;

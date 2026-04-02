@@ -168,7 +168,7 @@ const HeroFightCard = ({ fightData }) => {
           
           <div className="prediction-labels">
             <span className="prediction-label">📊 SCIPHR PREDICTION</span>
-            <span className="confidence-badge confidence-{fight.confidence.toLowerCase().replace('-', '')}">
+            <span className={`confidence-badge confidence-${fight.confidence.toLowerCase().replace('-', '')}`}>
               🔥 Confidence: {fight.confidence}
             </span>
           </div>

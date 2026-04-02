@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import api from '../api/api';
 import FighterSearchModal from '../components/picks/FighterSearchModal';
 import FightPoster from '../components/picks/FightPoster';
 import AnalystMode from '../components/picks/AnalystMode';
@@ -40,18 +41,7 @@ const PicksBuilder = () => {
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/predict', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fighter1: fighter1.name,
-          fighter2: fighter2.name,
-        }),
-      });
-      
-      const data = await response.json();
+      const data = await api.predictFight(fighter1.name, fighter2.name);
       setPrediction(data);
     } catch (error) {
       console.error('Prediction failed:', error);

@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import api from '../../api/api';
 import html2canvas from 'html2canvas';
 import Button from '../shared/Button';
 import './FightPoster.css';
@@ -69,11 +70,8 @@ const FightPoster = ({
     setGeneratingAI(true);
     
     try {
-      const response = await fetch('http://localhost:8000/generate-ai-poster', {
+      const data = await api.request('/generate-ai-poster', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           fighter1_name: fighter1.name,
           fighter2_name: fighter2.name,
@@ -83,9 +81,7 @@ const FightPoster = ({
           }
         }),
       });
-      
-      const data = await response.json();
-      
+
       if (data.success) {
         setAiPosterUrl(data.image_url);
         setAiPosterStyle(data.style_name);
