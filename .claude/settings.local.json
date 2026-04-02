@@ -13,7 +13,19 @@
       "Skill(review)",
       "Skill(ship)",
       "Bash(grep -n \"alert\\(\\)\\\\|alert\\(\" frontend/src/components/*.jsx frontend/src/pages/*.jsx)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(python -m py_compile backend/db/models.py backend/scripts/migrate_csv.py src/golden_feature_calculator.py)",
+      "Bash(python -m py_compile backend/tests/conftest.py backend/tests/test_feature_calculator.py backend/tests/test_migrate_csv.py backend/tests/test_predictions_log.py)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/test_feature_calculator.py tests/test_migrate_csv.py -v)",
+      "Bash(C:/Users/sagas/sciphr/venv/Scripts/python.exe -m pip install sqlalchemy psycopg2-binary --quiet)",
+      "Bash(C:/Users/sagas/sciphr/venv/Scripts/python.exe -m pytest tests/test_feature_calculator.py tests/test_migrate_csv.py -v)",
+      "Bash(C:/Users/sagas/sciphr/venv/Scripts/python.exe -m py_compile backend/scripts/migrate_csv.py src/golden_feature_calculator.py)",
+      "Bash(C:/Users/sagas/sciphr/venv/Scripts/python.exe -m pytest tests/ -v)",
+      "Bash(python -c ':*)",
+      "Bash(git merge:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
     ]
   }
 }

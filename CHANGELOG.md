@@ -2,6 +2,29 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.1.0] - 2026-04-02
+
+### Added
+- `backend/db/models.py`: SQLAlchemy models for all 5 tables — `fighters`, `fights`, `predictions_log`, `events`, `odds_history`; uses `BigInteger().with_variant(Integer, "sqlite")` for cross-DB PK compatibility; JSON type (not dialect JSONB) for SQLite test compatibility
+- `backend/scripts/migrate_csv.py`: One-time CSV → PostgreSQL migration script; loads 380MB golden CSV, sorts by date ascending so latest fight overwrites earlier, pre-normalizes all features to canonical `r_*` form regardless of corner assignment, dialect-aware ON CONFLICT (SQLite/PostgreSQL), idempotent re-runs
+- `backend/db/__init__.py`, `backend/scripts/__init__.py`: Package init files
+- `src/golden_feature_calculator.py`: Fully rewritten — CSV/pandas loading replaced with two indexed DB queries per prediction; `get_latest_fighter_stats()` maps DB columns to original CSV key names; `build_full_feature_vector()` fetches fighter1 directly (canonical `r_*`), remaps fighter2 (`r_*→b_*`), computes `diff_*` features, assembles 5,401-element vector; `_parse_json()` helper handles SQLite string vs PostgreSQL dict return
+- `src/predictor_golden.py`: `__init__` accepts `engine` parameter instead of `data_path`; `_build_fighter_list()` queries `SELECT name FROM fighters` instead of reading CSV
+- `backend/main.py`: Startup event connects to PostgreSQL via `DATABASE_URL` env var with `SELECT 1` health check; predictor initialized with DB engine; every `/predict` success inserts a row into `predictions_log` (try/except — non-fatal)
+- `backend/requirements.txt`: Added `psycopg2-binary==2.9.10` and `SQLAlchemy==2.0.41`
+- `backend/tests/conftest.py`: Shared SQLite in-memory fixture with `StaticPool` + `check_same_thread=False` for FastAPI threadpool compatibility
+- `backend/tests/test_feature_calculator.py`: 7 integration tests for `GoldenFeatureCalculator` — stats mapping, missing fighter, `r_*` direct / `b_*` remap, suffix remap, mutual-exclusion warning, `diff_*` computation
+- `backend/tests/test_migrate_csv.py`: 4 integration tests — NaN→0.0, latest-fight-wins, idempotency, `was_red=False` canonical remapping
+- `backend/tests/test_fighters_endpoint.py`: 2 tests — `/fighters` returns DB-sourced names, empty DB returns `[]` without crash
+- `backend/tests/test_predictions_log.py`: 1 test — successful `/predict` inserts exactly one `predictions_log` row
+- `TODOS.md`: TODO-01 — Alembic setup before Phase 6 deploy
+
+### Changed
+- `backend/.env.example`: `DATABASE_URL` corrected from `asyncpg` to `psycopg2` driver scheme
+- `backend/main.py`: Removed unused `from sqlalchemy.orm import Session` import
+- `backend/scripts/migrate_csv.py`: Added `# mirrors main.py determine_weight_class` comment on `_weight_class()` threshold duplication
+- `STATUS.md`: Phase 1 marked 🟡 In Progress; decisions log updated with 4 new entries; test coverage updated (21/21); next 3 tasks updated to Supabase migration steps
+
 ## [0.1.0.2] - 2026-04-02
 
 ### Fixed
