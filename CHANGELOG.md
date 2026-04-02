@@ -2,6 +2,24 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.2.0] - 2026-04-02
+
+### Added
+- `backend/db/models.py`: `EventFight` table — event_id FK, fighter1_name, fighter2_name, card_position, weight_class, is_title_fight, narratives (JSON list of narrative signal tags), short_notice, weight_miss, notes; used by Phase 2 Narrative Trap detector and Phase 3 events API
+- `backend/db/models.py`: `NarrativeOutcome` table — tracks Narrative Trap prediction outcomes over time; feeds `/scorecard/narrative-traps` (Phase 4)
+- `backend/db/models.py`: `predictions_log` intelligence signal columns — chaos_score, perception_gap, narrative_risk, value_signal, edge_pct, odds_at_prediction (JSON); all NULL until Phase 2 wires intelligence modules into /predict
+- `backend/db/models.py`: `predictions_log` FK linkage — event_id → events, fight_id → event_fights; NULL until Phase 3 event data is populated
+- `backend/db/models.py`: `predictions_log` post-fight resolution columns — actual_winner, was_correct, actual_method, actual_round, resolved_at; NULL until fight resolves; feeds Historical Scorecard (Phase 4)
+- `backend/db/models.py`: `fighters` structural columns — nickname, style (STRIKER|WRESTLER|GRAPPLER|BRAWLER|COUNTER), is_active, photo_path; needed by Fighter Browser (Phase 4) and nightmare_matchup.py / win_path.py (Phase 2)
+- `backend/db/models.py`: `fighters` Phase 2 computed score columns — aura_score, chaos_contribution, mirage_meter, composite_score, last_computed_at; NULL until intelligence modules run; defined now to avoid a migration mid-Phase 2
+- `backend/db/models.py`: `fighters` audit columns — created_at, updated_at (server-side defaults)
+- `backend/db/models.py`: `events` renamed columns (name→event_name, date→event_date) and added card_temperature, avg_chaos_score, is_published, created_at, updated_at
+- `TODOS.md`: TODO-02 — two PRD text divergences flagged for next PRD revision (fights table column count §11, asyncpg→psycopg2 §15)
+
+### Changed
+- `backend/db/models.py`: `OddsHistory` restructured from per-event-pair to per-fighter-per-recording schema; added fighter_name, american_odds, implied_probability, is_opening_line; fight_id FK now points to event_fights (not events) for fight-level granularity required by Sharp Money Indicator
+- `backend/scripts/migrate_csv.py`: Fighter upsert now explicitly sets updated_at=func.now() in on_conflict_do_update set_ dict — SQLAlchemy's onupdate= event does not fire for Core SQL upserts
+
 ## [0.1.1.0] - 2026-04-02
 
 ### Added
