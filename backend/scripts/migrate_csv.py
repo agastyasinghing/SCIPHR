@@ -52,7 +52,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, func, text
 from sqlalchemy.engine import Engine
 
 # Allow running as: python backend/scripts/migrate_csv.py
@@ -284,9 +284,12 @@ def migrate(
             stmt = _ins.on_conflict_do_update(
                 index_elements=["name"],
                 set_={
-                    col: getattr(_ins.excluded, col)
-                    for col in fighter_rows[0]
-                    if col != "name"
+                    **{
+                        col: getattr(_ins.excluded, col)
+                        for col in fighter_rows[0]
+                        if col != "name"
+                    },
+                    "updated_at": func.now(),  # onupdate= doesn't fire for Core SQL upserts
                 },
             )
             result = conn.execute(stmt)

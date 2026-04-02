@@ -40,3 +40,29 @@ alembic upgrade head
 
 **Depends on / blocked by:** Nothing. Can be done any time after Phase 1.
 Should be done before Phase 6 deploy.
+
+---
+
+## TODO-02 — PRD text divergences (update PRD before v2 planning)
+
+Two deliberate architectural decisions diverge from the PRD text. Both are
+documented in STATUS.md Decisions Log but the PRD itself is not yet updated.
+Flag these in the next PRD revision session to avoid confusing future contributors.
+
+**Divergence A — fights table column count (PRD §11)**
+PRD §11 says: "faithful migration of all 5,401 columns."
+Actual design: `fights` table stores only 6 metadata columns (r_name, b_name,
+date, winner, method, weight_class). Features live as JSONB on
+`fighters.latest_features` instead.
+Reason: per-fight JSONB would be ~912MB, exceeding Supabase free tier (500MB).
+Per-fighter JSONB is ~85MB.
+
+**Divergence B — ORM driver (PRD §15)**
+PRD §15 says: "SQLAlchemy + asyncpg."
+Actual implementation: sync SQLAlchemy + psycopg2.
+Reason: the XGBoost prediction pipeline is synchronous Python; FastAPI
+threadpools sync DB calls automatically. asyncpg would require rewriting the
+entire predictor_golden.py call chain as async — not worth it for v1 throughput.
+
+**Where to fix:** `SCIPHR_PRD_v1.1.md` §11 (Migration Strategy paragraph) and
+§15 (Backend table, Database ORM row).
