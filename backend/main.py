@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import os
 import sys
 import numpy as np
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -17,10 +18,16 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS
+# CORS — env var driven for deploy; localhost fallback for dev
+_cors_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+_cors_origins = (
+    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    if _cors_origins_env
+    else ["http://localhost:5173", "http://127.0.0.1:5173"]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,6 +55,10 @@ async def startup_event():
 class PredictionRequest(BaseModel):
     fighter1: str
     fighter2: str
+
+class DetailedStatsRequest(BaseModel):
+    fighter1_name: str
+    fighter2_name: str
 
 def convert_numpy(obj):
     """Convert numpy types to native Python types"""
@@ -315,14 +326,14 @@ async def create_ai_poster(request: Request, poster_request: AIPosterRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/detailed-stats")
-async def get_detailed_stats(request: dict):
+async def get_detailed_stats(request: DetailedStatsRequest):
     """
     Get detailed statistics for Analyst Mode
     Uses the same data extraction as the prediction endpoint
     """
     try:
-        fighter1_name = request.get('fighter1_name')
-        fighter2_name = request.get('fighter2_name')
+        fighter1_name = request.fighter1_name
+        fighter2_name = request.fighter2_name
         
         print(f"\n{'='*70}")
         print(f"📊 DETAILED STATS REQUEST")

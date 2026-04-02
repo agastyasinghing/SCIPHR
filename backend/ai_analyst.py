@@ -28,9 +28,6 @@ class AIFightAnalyst:
         fighter2 = prediction_data['fighter2']
         winner = prediction_data['winner']
         confidence = prediction_data['confidence']
-        prob_f1 = prediction_data['prob_fighter1']
-        prob_f2 = prediction_data['prob_fighter2']
-        
         f1_stats = prediction_data['fighter1_stats']
         f2_stats = prediction_data['fighter2_stats']
         
