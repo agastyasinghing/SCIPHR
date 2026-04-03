@@ -151,6 +151,19 @@ def test_idempotent_on_second_run(engine, tmp_path):
     assert fights_1   == fights_2
 
 
+def test_fighters_only_skips_fights(engine, tmp_path):
+    """fighters_only=True must populate fighters but leave fights table empty."""
+    csv = _make_csv(tmp_path, [_base_row()])
+    migrate(csv, engine=engine, fighters_only=True)
+
+    with engine.connect() as conn:
+        n_fights   = conn.execute(text("SELECT COUNT(*) FROM fights")).scalar()
+        n_fighters = conn.execute(text("SELECT COUNT(*) FROM fighters")).scalar()
+
+    assert n_fights == 0, "fighters_only must not insert any fights"
+    assert n_fighters > 0, "fighters_only must still upsert fighters"
+
+
 def test_was_red_false_when_fighter_only_in_blue(engine, tmp_path):
     """
     Fighter B only ever appears as b_name → was_red must be False,
