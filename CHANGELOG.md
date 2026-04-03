@@ -2,6 +2,17 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.3.0] - 2026-04-02
+
+### Fixed
+- `migrate_csv.py`: silent migration failure caused by Supabase session pooler rolling back the entire insert as a single transaction — replaced with chunked inserts (100 rows/transaction) with explicit commit after each chunk
+
+### Added
+- `migrate_csv.py`: `--fighters-only` flag to upsert only the fighters table (reads CSV for feature data, skips fight inserts); useful for backfilling fighters when fights are already present
+- `migrate_csv.py`: connection timeout retry logic — each chunk retried up to 3 times with exponential backoff (2s → 4s → 8s) on `OperationalError` / `DatabaseError`
+- `migrate_csv.py`: progress logging every 500 rows (`fights ... 500 / 8231 rows submitted`)
+- `tests/test_migrate_csv.py`: `test_fighters_only_skips_fights` — asserts fights table stays empty and fighters table is populated when `fighters_only=True`
+
 ## [0.1.2.0] - 2026-04-02
 
 ### Added
