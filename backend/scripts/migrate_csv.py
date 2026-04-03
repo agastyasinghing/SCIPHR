@@ -4,6 +4,7 @@ One-time CSV → PostgreSQL migration for SCIPHR.
 Usage:
     python migrate_csv.py --csv /path/to/golden_full_converted.csv
     python migrate_csv.py --csv /path/to/golden_full_converted.csv --database-url postgresql+psycopg2://...
+    python migrate_csv.py --csv /path/to/golden_full_converted.csv --fighters-only
 
 DATABASE_URL defaults to the DATABASE_URL environment variable.
 
@@ -20,8 +21,8 @@ Algorithm:
           - Extract base profile stats (wins, losses, height, reach, …).
           - Extract pre-normalized feature vector (canonical r_* form) via
             _extract_features().
-    5.  Bulk-upsert fighters (ON CONFLICT name DO UPDATE).
-    6.  Bulk-insert fights  (ON CONFLICT r_name, b_name, date DO NOTHING).
+    5.  Upsert fighters in chunks of CHUNK_SIZE (ON CONFLICT name DO UPDATE).
+    6.  Insert fights in chunks of CHUNK_SIZE (ON CONFLICT DO NOTHING).
 
 Feature pre-normalization (_extract_features):
     All features are stored in canonical 'red corner' form regardless of
@@ -41,19 +42,26 @@ Idempotency:
     Safe to run multiple times.  fighters uses ON CONFLICT DO UPDATE so
     re-running with the same CSV produces the same result.  fights uses
     ON CONFLICT DO NOTHING.
+
+Chunked inserts:
+    All DB writes use CHUNK_SIZE=100 rows per transaction with an explicit
+    commit after each chunk. This avoids Supabase session pooler timeouts
+    that silently roll back large single-transaction inserts.
 """
 
 import argparse
 import os
 import sys
+import time
 import logging
 from datetime import date as date_type
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, func, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError, DatabaseError
 
 # Allow running as: python backend/scripts/migrate_csv.py
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -61,6 +69,34 @@ from db.models import Base, Fight, Fighter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
+
+CHUNK_SIZE = 100
+LOG_EVERY = 500  # log progress every N rows
+RETRY_ATTEMPTS = 3
+RETRY_BASE_DELAY = 2.0  # seconds, doubles each attempt
+
+
+# ---------------------------------------------------------------------------
+# Retry helper
+# ---------------------------------------------------------------------------
+
+def _with_retry(fn: Callable, label: str = "operation") -> None:
+    """Run fn(), retrying up to RETRY_ATTEMPTS times on connection errors."""
+    delay = RETRY_BASE_DELAY
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        try:
+            fn()
+            return
+        except (OperationalError, DatabaseError) as exc:
+            if attempt == RETRY_ATTEMPTS:
+                log.error("%s failed after %d attempts: %s", label, attempt, exc)
+                raise
+            log.warning(
+                "%s failed (attempt %d/%d): %s — retrying in %.1fs",
+                label, attempt, RETRY_ATTEMPTS, exc, delay,
+            )
+            time.sleep(delay)
+            delay *= 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +209,85 @@ def _extract_base_stats(row: pd.Series, was_red: bool) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Chunked insert helpers
+# ---------------------------------------------------------------------------
+
+def _insert_fights_chunked(
+    engine: Engine,
+    fight_rows: list[dict],
+    dialect: str,
+) -> int:
+    """Insert fights in CHUNK_SIZE batches; commit after each chunk."""
+    if dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as _insert
+    else:
+        from sqlalchemy.dialects.postgresql import insert as _insert
+
+    total = len(fight_rows)
+    inserted = 0
+
+    for chunk_start in range(0, total, CHUNK_SIZE):
+        chunk = fight_rows[chunk_start : chunk_start + CHUNK_SIZE]
+
+        def _do_insert(c=chunk):
+            with engine.begin() as conn:
+                stmt = (
+                    _insert(Fight)
+                    .values(c)
+                    .on_conflict_do_nothing(index_elements=["r_name", "b_name", "date"])
+                )
+                conn.execute(stmt)
+                # engine.begin() commits on clean exit
+
+        _with_retry(_do_insert, label=f"fights chunk {chunk_start}–{chunk_start+len(chunk)}")
+        inserted += len(chunk)
+
+        if inserted % LOG_EVERY == 0 or inserted == total:
+            log.info("  fights ... %d / %d rows submitted", inserted, total)
+
+    return inserted
+
+
+def _upsert_fighters_chunked(
+    engine: Engine,
+    fighter_rows: list[dict],
+    dialect: str,
+) -> int:
+    """Upsert fighters in CHUNK_SIZE batches; commit after each chunk."""
+    if dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as _insert
+    else:
+        from sqlalchemy.dialects.postgresql import insert as _insert
+
+    total = len(fighter_rows)
+    upserted = 0
+    set_cols = [col for col in fighter_rows[0] if col != "name"]
+
+    for chunk_start in range(0, total, CHUNK_SIZE):
+        chunk = fighter_rows[chunk_start : chunk_start + CHUNK_SIZE]
+
+        def _do_upsert(c=chunk):
+            with engine.begin() as conn:
+                _ins = _insert(Fighter).values(c)
+                stmt = _ins.on_conflict_do_update(
+                    index_elements=["name"],
+                    set_={
+                        **{col: getattr(_ins.excluded, col) for col in set_cols},
+                        "updated_at": func.now(),
+                    },
+                )
+                conn.execute(stmt)
+
+        _with_retry(_do_upsert, label=f"fighters chunk {chunk_start}–{chunk_start+len(chunk)}")
+        upserted += len(chunk)
+
+        if upserted % LOG_EVERY == 0 or upserted == total:
+            log.info("  fighters ... %d / %d rows submitted", upserted, total)
+
+    return upserted
+
+
+# ---------------------------------------------------------------------------
 # Core migration function (importable for tests)
 # ---------------------------------------------------------------------------
 
@@ -181,6 +296,7 @@ def migrate(
     database_url: Optional[str] = None,
     *,
     engine: Optional[Engine] = None,
+    fighters_only: bool = False,
 ) -> None:
     """
     Load *csv_path* and migrate fighters + fights into the database.
@@ -190,6 +306,9 @@ def migrate(
     *engine*.  Passing *engine* directly is required when using SQLite
     in-memory databases in tests, since each new create_engine() call opens
     a fresh isolated DB.
+
+    fighters_only=True: skip fight inserts, upsert fighters only.
+    Useful for backfilling the fighters table when fights are already present.
     """
     if not os.path.isfile(csv_path):
         raise FileNotFoundError(f"CSV not found: {csv_path}")
@@ -205,6 +324,9 @@ def migrate(
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.sort_values("date", ascending=True).reset_index(drop=True)
     log.info("Loaded %d fights, %d columns", len(df), len(df.columns))
+
+    if fighters_only:
+        log.info("--fighters-only mode: skipping fight inserts")
 
     # -----------------------------------------------------------------------
     # Pass 1: collect fights metadata + build per-fighter latest-fight state
@@ -224,21 +346,24 @@ def migrate(
         method = _clean(row.get("finish")) if not pd.isna(row.get("finish", float("nan"))) else None
         wc_col = row.get("weight_class") if not pd.isna(row.get("weight_class", float("nan"))) else None
 
-        fight_rows.append({
-            "r_name":       str(r_name),
-            "b_name":       str(b_name),
-            "date":         fight_date,
-            "winner":       str(winner) if winner is not None else None,
-            "method":       str(method) if method is not None else None,
-            "weight_class": str(wc_col) if wc_col is not None else None,
-        })
+        if not fighters_only:
+            fight_rows.append({
+                "r_name":       str(r_name),
+                "b_name":       str(b_name),
+                "date":         fight_date,
+                "winner":       str(winner) if winner is not None else None,
+                "method":       str(method) if method is not None else None,
+                "weight_class": str(wc_col) if wc_col is not None else None,
+            })
 
         # Overwrite with more recent fight (ascending sort guarantees this)
         fighter_latest[str(r_name)] = {"row": row, "was_red": True,  "date": fight_date, "opp": str(b_name)}
         fighter_latest[str(b_name)] = {"row": row, "was_red": False, "date": fight_date, "opp": str(r_name)}
 
-    log.info("Processed %d valid fight rows, %d unique fighters",
-             len(fight_rows), len(fighter_latest))
+    if fighters_only:
+        log.info("Processed %d CSV rows → %d unique fighters (fights skipped)", len(df), len(fighter_latest))
+    else:
+        log.info("Processed %d valid fight rows, %d unique fighters", len(fight_rows), len(fighter_latest))
 
     # -----------------------------------------------------------------------
     # Pass 2: build fighter upsert dicts
@@ -259,43 +384,19 @@ def migrate(
         })
 
     # -----------------------------------------------------------------------
-    # DB writes — dialect-specific upsert (PostgreSQL or SQLite)
+    # DB writes — chunked, one commit per chunk, with retry
     # -----------------------------------------------------------------------
     dialect = engine.dialect.name
-    if dialect == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert as _insert
-    else:
-        from sqlalchemy.dialects.postgresql import insert as _insert
 
-    with engine.begin() as conn:
-        # Fights — ON CONFLICT DO NOTHING (idempotent)
-        if fight_rows:
-            stmt = (
-                _insert(Fight)
-                .values(fight_rows)
-                .on_conflict_do_nothing(index_elements=["r_name", "b_name", "date"])
-            )
-            result = conn.execute(stmt)
-            log.info("Fights inserted: %d (skipped duplicates)", result.rowcount)
+    if not fighters_only and fight_rows:
+        log.info("Inserting %d fights in chunks of %d …", len(fight_rows), CHUNK_SIZE)
+        _insert_fights_chunked(engine, fight_rows, dialect)
 
-        # Fighters — ON CONFLICT DO UPDATE (re-running updates to latest state)
-        if fighter_rows:
-            _ins = _insert(Fighter).values(fighter_rows)
-            stmt = _ins.on_conflict_do_update(
-                index_elements=["name"],
-                set_={
-                    **{
-                        col: getattr(_ins.excluded, col)
-                        for col in fighter_rows[0]
-                        if col != "name"
-                    },
-                    "updated_at": func.now(),  # onupdate= doesn't fire for Core SQL upserts
-                },
-            )
-            result = conn.execute(stmt)
-            log.info("Fighters upserted: %d", result.rowcount)
+    if fighter_rows:
+        log.info("Upserting %d fighters in chunks of %d …", len(fighter_rows), CHUNK_SIZE)
+        _upsert_fighters_chunked(engine, fighter_rows, dialect)
 
-    # Verify
+    # Verify final counts
     with engine.connect() as conn:
         n_fighters = conn.execute(text("SELECT COUNT(*) FROM fighters")).scalar()
         n_fights   = conn.execute(text("SELECT COUNT(*) FROM fights")).scalar()
@@ -318,5 +419,14 @@ if __name__ == "__main__":
         default=os.getenv("DATABASE_URL"),
         help="SQLAlchemy database URL (defaults to DATABASE_URL env var)",
     )
+    parser.add_argument(
+        "--fighters-only",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip fight inserts and upsert fighters table only. "
+            "Use this to backfill fighters when fights are already present."
+        ),
+    )
     args = parser.parse_args()
-    migrate(args.csv, args.database_url)
+    migrate(args.csv, args.database_url, fighters_only=args.fighters_only)
