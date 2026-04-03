@@ -1,9 +1,8 @@
 """
-Test: GET /fighters returns names sourced from the DB (not CSV).
+Test: GET /fighters queries the fighters table directly via the engine.
 
-Verifies that available_fighters is built from the fighters table via
-predictor._build_fighter_list(), so a DB with data → populated response,
-and an empty DB → empty list.
+Verifies that a DB with data → populated response, and an empty DB → empty
+list. The endpoint never reads from the predictor's startup cache.
 """
 
 import sys

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
@@ -93,23 +93,25 @@ async def root():
     return {"message": "SCIPHR API is running", "status": "online"}
 
 @app.get("/fighters")
-async def get_fighters(search: str = None, limit: int = 100):
-    """Get list of available fighters"""
-    if predictor is None:
-        raise HTTPException(status_code=500, detail="Predictor not initialized")
-    
-    fighters = predictor.available_fighters
-    
-    if search:
-        search_lower = search.lower()
-        fighters = [f for f in fighters if search_lower in f.lower()]
-    
-    fighters = sorted(fighters)[:limit]
-    
-    return {
-        "fighters": fighters,
-        "count": len(fighters)
-    }
+async def get_fighters(search: str = None, limit: int = Query(default=100, le=500)):
+    """Get list of available fighters — always queries the DB, never the startup cache."""
+    if engine is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+
+    with engine.connect() as conn:
+        if search:
+            rows = conn.execute(
+                text("SELECT name FROM fighters WHERE LOWER(name) LIKE LOWER(:q) ORDER BY name LIMIT :lim"),
+                {"q": f"%{search}%", "lim": limit},
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                text("SELECT name FROM fighters ORDER BY name LIMIT :lim"),
+                {"lim": limit},
+            ).fetchall()
+
+    fighters = [row[0] for row in rows]
+    return {"fighters": fighters, "count": len(fighters)}
 
 @app.get("/fighter/{fighter_name}")
 async def get_fighter_profile(fighter_name: str):
