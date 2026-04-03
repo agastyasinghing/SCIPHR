@@ -2,6 +2,15 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.3.1] - 2026-04-02
+
+### Fixed
+- `main.py GET /fighters`: endpoint was reading from `predictor.available_fighters` (a list cached at server startup) — if the server started before the migration ran, the cache was empty and never refreshed; endpoint now queries the `fighters` table directly via `engine` on every request
+
+### Changed
+- `main.py GET /fighters`: added `Query(le=500)` ceiling on the `limit` parameter to prevent unbounded table scans from a single request
+- `tests/test_fighters_endpoint.py`: updated module docstring to accurately describe the direct-DB-query behaviour (no longer references `predictor._build_fighter_list()`)
+
 ## [0.1.3.0] - 2026-04-02
 
 ### Fixed
