@@ -2,6 +2,29 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.5.0] - 2026-04-04
+
+### Added
+- **Phase 2 Intelligence Engine — all 9 scoring formulas fully implemented** (174/174 tests passing)
+- `chaos_scorer.py`: 6-signal weighted formula (finish rate 0-55, style clash 0-15, offensive output 0-10, chin issues 0-10, record volatility 0-10, streak dynamics 0-5) with weight-class multiplier (HW 1.30 → FLW 0.85) and symmetric style-clash matrix
+- `perception_gap.py`: 5-component aura score heuristic (volume, finish rate, recency, win streak, win rate) driving perceived-vs-model probability delta; MODERATE (0.10) / STRONG (0.20) thresholds
+- `narrative_trap.py`: tag-weighted risk scoring (HYPE_TRAIN, REVENGE_FIGHT, COMEBACK, SHORT_NOTICE, WEIGHT_MISS, TITLE_FIGHT) with trapped-fighter identification
+- `value_bet.py`: half-Kelly criterion with FADE_OPPORTUNITY detection (market vs model direction disagreement) and STRONG_EDGE / EDGE_DETECTED / NO_EDGE signal classification
+- `fight_dna.py`: 8-dimension fighter profiling (striking, grappling, wrestling, submission, pressure, chin, cardio, speed) with Euclidean clash intensity and collision-type labelling
+- `false_consensus.py`: coinflip detection combining actual probability gap (<0.12) with chaos score (>=55) and model uncertainty
+- `nightmare_matchup.py`: style-pattern matrix (STRIKER vs GRAPPLER → SEVERE, etc.) with data-volume guard downgrading severity when fight count < 3
+- `win_path.py`: 7-path kill-chain labelling (EARLY_KO, GROUND_AND_POUND, SUBMISSION, TAKEDOWN_CONTROL, DECISION_VOLUME, DECISION_COUNTER, SPLIT_DECISION) with COUNTER-style boost and sub-threat modifier
+- `badge_engine.py`: 11 SCIPHR badge rules wired to all module outputs (CHAOS_CERTIFIED, NARRATIVE_HOSTAGE, FALSE_FAVORITE, DOG_WITH_TEETH, FRAUD_CHECK, PUBLIC_TAX, ROUND_ONE_DEMON, DECISION_PRISONER, SILENT_KILLER, AURA_MERCHANT, CASUAL_MIRAGE) with fighter-name propagation from orchestrator
+
+### Changed
+- All 9 intelligence modules removed `raise NotImplementedError` stubs and their skip markers in tests
+- `orchestrator.py`: passes `f1_name` / `f2_name` to `badge_engine.compute()` so per-fighter badges carry actual names rather than `"matchup"` placeholder
+- `test_orchestrator.py`: renamed `test_all_stub_modules_return_none_in_result` → `test_all_modules_return_results` (formulas now return real results)
+
+### Fixed
+- `badge_engine.FALSE_FAVORITE`: reason string now picks `gap_f2` when F2 is the overvalued fighter (previously always formatted `gap_f1` regardless of direction)
+- `badge_engine.ROUND_ONE_DEMON` / `DECISION_PRISONER` / `AURA_MERCHANT`: removed dead loop variables (`label_prefix`, `name`) and now assign the actual fighter name via the new `f1_name`/`f2_name` params
+
 ## [0.1.4.0] - 2026-04-03
 
 ### Added
