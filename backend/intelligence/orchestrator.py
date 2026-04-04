@@ -39,7 +39,6 @@ Failure isolation:
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Optional
 
@@ -170,16 +169,22 @@ class IntelligenceOrchestrator:
             value_res = ValueBetResult()
 
         # ── Badge assignment ───────────────────────────────────────────────
-        badges: list[Badge] = badge_engine.compute(
-            chaos=chaos_res,
-            gap=gap_res,
-            narrative=narrative_res,
-            value=value_res,
-            dna=dna_res,
-            consensus=consensus_res,
-            nightmare=nightmare_res,
-            win=win_res,
-        )
+        # badge_engine is called via _safe_compute so a NotImplementedError
+        # (stub not yet filled by Opus) or any runtime error never propagates
+        # to the caller — it degrades gracefully to an empty badge list.
+        badges: list[Badge] = self._safe_compute(
+            lambda: badge_engine.compute(
+                chaos=chaos_res,
+                gap=gap_res,
+                narrative=narrative_res,
+                value=value_res,
+                dna=dna_res,
+                consensus=consensus_res,
+                nightmare=nightmare_res,
+                win=win_res,
+            ),
+            module_name="badge_engine",
+        ) or []
 
         return IntelligenceResult(
             chaos=chaos_res,
