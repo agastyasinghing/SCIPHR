@@ -219,8 +219,8 @@ class TestOrchestratorCompute:
 
         assert isinstance(result, IntelligenceResult)
 
-    def test_all_stub_modules_return_none_in_result(self, engine):
-        """All stub modules → None in result (except value_bet → NO_ODDS)."""
+    def test_all_modules_return_results(self, engine):
+        """All modules return real results now (Opus formulas implemented)."""
         with engine.begin() as conn:
             _seed_fighter(conn, "FA")
             _seed_fighter(conn, "FB")
@@ -228,12 +228,12 @@ class TestOrchestratorCompute:
         orch = IntelligenceOrchestrator(engine)
         result = orch.compute("FA", "FB", (0.60, 0.40))
 
-        assert result.chaos is None
-        assert result.perception_gap is None
-        assert result.fight_dna is None
-        assert result.false_consensus is None
-        assert result.nightmare is None
-        assert result.win_path is None
+        assert result.chaos is not None
+        assert result.perception_gap is not None
+        assert result.fight_dna is not None
+        assert result.false_consensus is not None
+        assert result.nightmare is not None
+        assert result.win_path is not None
 
     def test_value_bet_always_no_odds_for_ad_hoc(self, engine):
         """value_bet should always be ValueBetResult(NO_ODDS) for ad-hoc calls."""
