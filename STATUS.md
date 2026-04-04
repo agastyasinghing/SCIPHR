@@ -9,7 +9,7 @@
 |---|---|---|
 | Phase 0 — P0 Bugs + Git Setup | ✅ Complete | All 13 bugs fixed, 7/7 tests passing |
 | Phase 1 — Database Migration | 🟡 In Progress | CSV → PostgreSQL |
-| Phase 2 — Intelligence Engine | 🔴 Not Started | All scoring modules |
+| Phase 2 — Intelligence Engine | 🟡 In Progress | Scaffolding + stubs built; Opus sessions needed for formulas |
 | Phase 3 — API Layer | 🔴 Not Started | Wire intelligence to FastAPI |
 | Phase 4 — Frontend Wiring | 🔴 Not Started | api.js + UI components |
 | Phase 5 — Claude + Poster | 🔴 Not Started | AI analysis + poster |
@@ -36,13 +36,14 @@
 
 ## In Progress
 Phase 1 — Database Migration (code complete, awaiting migration run against real Supabase DB).
+Phase 2 — Intelligence Engine (scaffolding complete; 9 scoring formulas need Opus sessions).
 
 ---
 
 ## Next 3 Tasks
-1. Create Supabase project + get DATABASE_URL → add to `backend/.env`
-2. Run `cd backend && python scripts/migrate_csv.py --csv ../data/golden_full_converted.csv`
-3. Smoke-test: start backend, hit /fighters and /predict, verify predictions_log row appears in Supabase
+1. Finish Phase 1: Create Supabase project + get DATABASE_URL → add to `backend/.env`, run migration
+2. Run Phase 2 infrastructure tests: `cd backend && python -m pytest tests/test_models.py tests/test_utils.py tests/test_orchestrator.py tests/test_narrative_trap.py tests/test_value_bet.py tests/test_badge_engine.py -v`
+3. Open Opus session for first intelligence formula (recommended order: chaos_scorer → perception_gap → win_path → false_consensus → fight_dna → nightmare_matchup → value_bet → badge_engine)
 
 ---
 
@@ -73,6 +74,15 @@ Phase 1 — Database Migration (code complete, awaiting migration run against re
 
 | Date | Decision | Rationale |
 |---|---|---|
+| Apr 2026 | Intelligence module interface: Pydantic BaseModel | Already in use in main.py; validates outputs, serializes to JSON cleanly |
+| Apr 2026 | Intelligence orchestration: IntelligenceOrchestrator class | Keeps main.py clean; badge_engine needs all outputs; easy to test |
+| Apr 2026 | fighters.style: on-the-fly via classify_style(), not persisted | Modules stay pure (no DB writes); fighters.style remains NULL in v1 |
+| Apr 2026 | value_bet: reads odds_history only; no live Odds API at predict time | Protects 500 req/mo free tier; deterministic /predict latency |
+| Apr 2026 | Intelligence data loading: orchestrator pre-loads fight history | Max 5 DB queries per /predict regardless of module count |
+| Apr 2026 | Intelligence failure isolation: per-module _safe_compute() | Any module exception returns None; prediction always succeeds |
+| Apr 2026 | Intelligence models: single models.py file | badge_engine needs all 9 result types; central file avoids circular imports |
+| Apr 2026 | Phase 2 build split: Sonnet scaffolding + stubs; Opus scoring formulas | CLAUDE.md model selection rule; stubs have detailed TODO(opus) briefs |
+| Apr 2026 | Fight history query: no LIMIT (full career) | Max ~35 rows per fighter; finish_rate accuracy over full career |
 | Apr 2026 | Database: PostgreSQL Option A — direct CSV migration, all columns | Simplest path, eliminates hosting blockers, no join complexity |
 | Apr 2026 | Events data: manual JSON curation for v1 | Zero cost, zero tech risk |
 | Apr 2026 | Odds data: The Odds API free tier | 500 req/mo sufficient for fight week cadence |
