@@ -2,6 +2,29 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.4.0] - 2026-04-03
+
+### Added
+- `backend/intelligence/` package: full Phase 2 Intelligence Engine scaffolding
+  - `models.py`: Pydantic v2 models for all 9 module result types (`ChaosResult`, `PerceptionGapResult`, `NarrativeTrapResult`, `ValueBetResult`, `FightDNAResult`, `FalseConsensusResult`, `NightmareResult`, `WinPathResult`), `FighterContext` input model, `Badge`, `BADGE_META`, and `IntelligenceResult` bundle
+  - `orchestrator.py`: `IntelligenceOrchestrator` — pre-loads fighter contexts (max 5 DB queries per `/predict`), runs all 9 modules via `_safe_compute` isolation, calls `badge_engine` via lambda in `_safe_compute` so a stub `NotImplementedError` never crashes the prediction response
+  - `utils.py`: five pure utility functions shared across modules — `classify_style`, `finish_rate`, `win_streak`, `american_to_implied`, `kelly_fraction` (half-Kelly)
+  - `narrative_trap.py`: `event_fight=None` and empty-narratives paths fully implemented (return `LOW` risk); tag scoring deferred to Opus
+  - `value_bet.py`: `fight_id=None` and no-odds-rows paths fully implemented (return `NO_ODDS`); Kelly criterion calc deferred to Opus
+  - `nightmare_matchup.py`: `classify_style()` call implemented; nightmare detection deferred to Opus
+  - All remaining modules (`chaos_scorer`, `perception_gap`, `fight_dna`, `false_consensus`, `win_path`, `badge_engine`) scaffolded with detailed `TODO(opus)` formula briefs
+- `backend/tests/`: full Phase 2 test suite (99 passing, 59 skipped Opus formula briefs)
+  - `test_models.py` (30 tests): FighterContext validation, IntelligenceResult defaults, Badge Literal key enforcement, Field validator boundary checks
+  - `test_utils.py` (34 tests): all 5 utility functions and all branches including critical edge cases
+  - `test_orchestrator.py` (29 tests): `_safe_compute`, `_build_context` DB queries, `latest_features=NULL` warning, full orchestration with stubs
+  - `test_narrative_trap.py`, `test_value_bet.py`, `test_badge_engine.py`: implemented-path tests + skipped formula briefs
+  - `test_chaos_scorer.py`, `test_false_consensus.py`, `test_fight_dna.py`, `test_nightmare_matchup.py`, `test_perception_gap.py`, `test_win_path.py`: stub infrastructure test + skipped formula briefs
+- `TODOS.md`: added TODO-03 (`scripts/fetch_odds.py`), TODO-04 (Odds API tier decision), TODO-05 (chaos weight back-test)
+
+### Fixed
+- `backend/intelligence/badge_engine.py`: replaced all-None short-circuit check with `_has_actionable_data()` gate that correctly treats `narrative.risk=="LOW"` and `value.active==False` as non-actionable, preventing `NotImplementedError` from propagating when narrative_trap returns a LOW-risk result for ad-hoc predictions
+- `backend/intelligence/orchestrator.py`: removed unused `import json`; wrapped `badge_engine.compute()` in `_safe_compute` via lambda so any mid-build `NotImplementedError` (e.g. one module implemented before badge_engine) degrades to empty badges rather than crashing `/predict`
+
 ## [0.1.3.1] - 2026-04-02
 
 ### Fixed
