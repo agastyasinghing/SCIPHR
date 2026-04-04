@@ -9,53 +9,13 @@ Display name: Narrative Trap
 Badge it powers: NARRATIVE_HOSTAGE (purple)
 Data source: event_fights.narratives (JSON list of tags, manually curated)
 
-─────────────────────────────────────────────────────────────────────
-TODO(opus): Implement the narrative trap scoring formula.
+Risk calibration:
+    risk_score 0          → LOW
+    risk_score 1-3        → MODERATE
+    risk_score 4+         → HIGH
 
-Context (from STATUS.md Decisions Log):
-    "Narrative traps v1: manually tagged in events JSON"
-    Automated NLP deferred to v2. The event_fights.narratives field
-    is a JSON list of strings, e.g. ["HYPE_TRAIN", "REVENGE_FIGHT"].
-
-Inputs available:
-    f1_ctx, f2_ctx     — fighter contexts (stats, fights)
-    event_fight        — dict from event_fights table row (may be None for
-                         ad-hoc /predict calls without an associated event)
-
-event_fight dict keys (from EventFight model):
-    narratives         — list[str] of trap tags (may be None/empty)
-    fighter1_name      — name of fighter in corner 1
-    fighter2_name      — name of fighter in corner 2
-    is_title_fight     — bool (title fights attract more narrative pressure)
-    short_notice       — bool (short-notice fights are high narrative risk)
-    weight_miss        — bool (weight miss signals chaos + narrative)
-    notes              — free text fight-week intel
-
-Known narrative trap tags (Opus to assign risk weights):
-    HYPE_TRAIN         — one fighter is heavily promoted going into this
-    REVENGE_FIGHT      — rematch with an emotional revenge narrative
-    COMEBACK_STORY     — fighter returning from loss/injury/hiatus
-    RETIREMENT_FIGHT   — "going out on their shield" narrative
-    HOME_FIGHTER       — massive crowd support for local fighter
-    UPSET_ALERT        — underdog getting extra media coverage
-    LEGACY_FIGHT       — title defence framed as legacy-defining
-    REDEMPTION_ARC     — fighter recovering public narrative after scandal
-    SHORT_NOTICE_CHAOS — late replacement, minimal camp
-
-Risk calibration (Opus decides final thresholds):
-    0 tags + no short_notice/weight_miss → LOW
-    1 tag OR (short_notice OR weight_miss) → MODERATE
-    2+ tags OR (title_fight + 1+ tag) → HIGH
-
-trapped_fighter logic:
-    The fighter the narrative is BUILT AROUND.  Usually the more hype-adjacent
-    fighter (HYPE_TRAIN, COMEBACK_STORY, RETIREMENT_FIGHT tags point to them).
-    If no clear narrative subject, return None.
-
-When event_fight is None (ad-hoc prediction):
-    Return NarrativeTrapResult(available=True, risk="LOW") immediately —
-    no narrative data available for non-event predictions.
-─────────────────────────────────────────────────────────────────────
+    short_notice / weight_miss each add 2 / 1 points respectively.
+    is_title_fight + any tag adds 1 bonus point.
 """
 
 from __future__ import annotations
@@ -65,43 +25,81 @@ from typing import Optional
 from .models import FighterContext, NarrativeTrapResult
 
 
+# Tag risk weights
+_TAG_WEIGHTS: dict[str, int] = {
+    "HYPE_TRAIN": 2,
+    "REVENGE_FIGHT": 2,
+    "COMEBACK_STORY": 2,
+    "LEGACY_FIGHT": 2,
+    "RETIREMENT_FIGHT": 1,
+    "HOME_FIGHTER": 1,
+    "UPSET_ALERT": 1,
+    "REDEMPTION_ARC": 1,
+    "SHORT_NOTICE_CHAOS": 1,
+}
+
+# Tags that typically centre on fighter1 (the promoted / narrative-adjacent fighter)
+_F1_NARRATIVE_TAGS = frozenset({
+    "HYPE_TRAIN", "COMEBACK_STORY", "RETIREMENT_FIGHT",
+    "REDEMPTION_ARC", "HOME_FIGHTER", "LEGACY_FIGHT",
+})
+
+
 def compute(
     f1_ctx: FighterContext,
     f2_ctx: FighterContext,
     event_fight: Optional[dict] = None,
 ) -> NarrativeTrapResult:
-    """
-    Detect narrative traps for this fight.
+    """Detect narrative traps for this fight."""
 
-    Args:
-        f1_ctx:      Pre-loaded context for fighter 1.
-        f2_ctx:      Pre-loaded context for fighter 2.
-        event_fight: Dict from event_fights table row, or None for ad-hoc
-                     /predict calls with no associated scheduled fight.
-
-    Returns:
-        NarrativeTrapResult.
-        If event_fight is None → risk='LOW', no active traps.
-        If event_fight has narratives → risk derived from tag count + weights.
-
-    TODO(opus): Implement the risk scoring and trapped_fighter logic.
-    """
     # No event fight data → no narrative context → always LOW risk.
-    # This path is fully implemented and does not need Opus.
     if event_fight is None:
         return NarrativeTrapResult(available=True, risk="LOW")
 
-    # Event fight present but may have no narratives tagged yet.
-    narratives = event_fight.get("narratives") or []
-    if not narratives:
+    narratives: list[str] = event_fight.get("narratives") or []
+    is_title: bool = bool(event_fight.get("is_title_fight", False))
+    short_notice: bool = bool(event_fight.get("short_notice", False))
+    weight_miss: bool = bool(event_fight.get("weight_miss", False))
+
+    # Nothing narrative-worthy at all → LOW
+    if not narratives and not short_notice and not weight_miss:
         return NarrativeTrapResult(available=True, risk="LOW")
 
-    # TODO(opus): Implement narrative risk scoring from tag list.
-    # Inputs: narratives (list[str]), event_fight["is_title_fight"],
-    #         event_fight["short_notice"], event_fight["weight_miss"],
-    #         f1_ctx.name, f2_ctx.name (to identify trapped_fighter)
-    # See module docstring for tag vocabulary and risk calibration guide.
-    raise NotImplementedError(
-        "narrative_trap formula: implement in Opus session. "
-        "See module docstring for tag vocabulary and risk calibration."
+    # ── Score narrative risk ─────────────────────────────────────────
+    risk_score = sum(_TAG_WEIGHTS.get(tag, 1) for tag in narratives)
+    if short_notice:
+        risk_score += 2
+    if weight_miss:
+        risk_score += 1
+    if is_title and narratives:
+        risk_score += 1
+
+    if risk_score >= 4:
+        risk = "HIGH"
+    elif risk_score >= 1:
+        risk = "MODERATE"
+    else:
+        risk = "LOW"
+
+    # ── Identify trapped fighter ─────────────────────────────────────
+    f1_name = event_fight.get("fighter1_name", f1_ctx.name)
+    f2_name = event_fight.get("fighter2_name", f2_ctx.name)
+
+    f1_tag_score = sum(1 for tag in narratives if tag in _F1_NARRATIVE_TAGS)
+    f2_tag_score = len(narratives) - f1_tag_score  # remaining are neutral/f2
+
+    trapped: Optional[str] = None
+    if f1_tag_score > f2_tag_score:
+        trapped = f1_name
+    elif f2_tag_score > f1_tag_score:
+        trapped = f2_name
+    elif narratives:
+        # Ambiguous — default to fighter1 (convention: promoted fighter)
+        trapped = f1_name
+
+    return NarrativeTrapResult(
+        available=True,
+        risk=risk,
+        active_traps=list(narratives),
+        trapped_fighter=trapped,
     )

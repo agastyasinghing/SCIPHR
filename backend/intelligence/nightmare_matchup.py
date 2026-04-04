@@ -7,81 +7,88 @@ style labels, and severity.
 Display name: Nightmare Matchup
 Badge it powers: (FRAUD_CHECK — amber, when nightmare + overvalued)
 
-─────────────────────────────────────────────────────────────────────
-TODO(opus): Implement the nightmare matchup detection formula.
+Known nightmare patterns (a faces nightmare):
+    STRIKER  vs GRAPPLER  → SEVERE   striker gets taken down & submitted
+    BRAWLER  vs GRAPPLER  → SEVERE   same pattern, brawler walks in
+    STRIKER  vs WRESTLER  → MILD     striker controlled on ground
+    BRAWLER  vs WRESTLER  → MILD     brawler controlled on ground
+    BRAWLER  vs COUNTER   → MILD     brawler walks onto counters
+    GRAPPLER vs WRESTLER  → MILD     grappler can't submit, can't stand
+    WRESTLER vs STRIKER   → MILD     wrestler can't close distance
 
-Context:
-    fighters.style is NULL for all fighters in v1 (the Phase 1 migration
-    does not populate it).  Style is derived on-the-fly via
-    utils.classify_style(stats) at predict time and NOT persisted.
-
-Utility functions:
-    classify_style(stats) → "STRIKER" | "WRESTLER" | "GRAPPLER" | "BRAWLER" | "COUNTER"
-
-Inputs:
-    f1_ctx.stats / f2_ctx.stats  — for classify_style()
-    f1_ctx.fights / f2_ctx.fights — for finishing method breakdown
-    f1_ctx.wins / losses          — record context
-
-Known nightmare matchup patterns (Opus to assign severity weights):
-    WRESTLER  vs STRIKER    → wrestler's nightmare (striker-killer)
-                               especially if striker has high str_def + counter style
-    GRAPPLER  vs WRESTLER   → grappler's nightmare (can't submit, can't stand up)
-    BRAWLER   vs COUNTER    → brawler's nightmare (walks onto counters)
-    STRIKER   vs GRAPPLER   → striker's nightmare (gets taken down, submitted)
-    BRAWLER   vs GRAPPLER   → brawler's nightmare (same as striker pattern)
-
-Severity classification (Opus to calibrate thresholds):
-    NONE   — no clear stylistic nightmare pattern
-    MILD   — pattern exists but fighter has shown ability to overcome it
-             (e.g., wrestler with decent takedown defence vs striker)
-    SEVERE — clear, historically validated nightmare matchup with no
-             stat evidence the fighter has overcome the pattern
-
-Mitigating factors (reduce severity):
-    - Nightmare fighter has high td_def (wrestler nightmare mitigated)
-    - Nightmare fighter has won via the opponent's dominant method before
-    - Record is recent and losses are not by the opponent's primary method
-
-Expected output:
-    NightmareResult(
-        available=True,
-        is_nightmare=True | False,
-        nightmare_fighter="Fighter Name" | None,
-        style_f1="STRIKER",
-        style_f2="WRESTLER",
-        matchup_label="STRIKER_VS_WRESTLER" | None,
-        severity="NONE" | "MILD" | "SEVERE",
-    )
-─────────────────────────────────────────────────────────────────────
+Severity downgraded to MILD/NONE when nightmare fighter has < 3 fights.
 """
 
 from __future__ import annotations
+
+from typing import Optional
 
 from .models import FighterContext, NightmareResult
 from . import utils
 
 
+# (style_a, style_b) → base severity when style_a is the nightmare victim
+_NIGHTMARE_PATTERNS: dict[tuple[str, str], str] = {
+    ("STRIKER", "GRAPPLER"):  "SEVERE",
+    ("BRAWLER", "GRAPPLER"):  "SEVERE",
+    ("STRIKER", "WRESTLER"):  "MILD",
+    ("BRAWLER", "WRESTLER"):  "MILD",
+    ("BRAWLER", "COUNTER"):   "MILD",
+    ("GRAPPLER", "WRESTLER"): "MILD",
+    ("WRESTLER", "STRIKER"):  "MILD",
+}
+
+
 def compute(f1_ctx: FighterContext, f2_ctx: FighterContext) -> NightmareResult:
-    """
-    Detect nightmare matchup patterns for this fight.
-
-    Args:
-        f1_ctx: Pre-loaded context for fighter 1.
-        f2_ctx: Pre-loaded context for fighter 2.
-
-    Returns:
-        NightmareResult. Style labels always populated (derived on-the-fly).
-
-    TODO(opus): Implement the nightmare detection and severity scoring.
-    """
-    # Style derivation is on-the-fly (fighters.style stays NULL in v1).
+    """Detect nightmare matchup patterns for this fight."""
     style_f1 = utils.classify_style(f1_ctx.stats)
     style_f2 = utils.classify_style(f2_ctx.stats)
 
-    # TODO(opus): Use style_f1 and style_f2 to detect nightmare patterns.
-    # See module docstring for known patterns and severity calibration.
-    raise NotImplementedError(
-        "nightmare_matchup formula: implement in Opus session. "
-        "See module docstring for nightmare pattern table."
+    # ── Check both orientations ───────────────────────────────────────
+    nightmare_ctx: Optional[FighterContext] = None
+    severity = "NONE"
+
+    pattern = _NIGHTMARE_PATTERNS.get((style_f1, style_f2))
+    if pattern:
+        nightmare_ctx = f1_ctx
+        severity = pattern
+    else:
+        pattern = _NIGHTMARE_PATTERNS.get((style_f2, style_f1))
+        if pattern:
+            nightmare_ctx = f2_ctx
+            severity = pattern
+
+    # ── No pattern matched ────────────────────────────────────────────
+    if nightmare_ctx is None:
+        return NightmareResult(
+            available=True,
+            is_nightmare=False,
+            style_f1=style_f1,
+            style_f2=style_f2,
+            severity="NONE",
+        )
+
+    # ── Data-volume guard: downgrade if nightmare fighter has < 3 fights
+    if len(nightmare_ctx.fights) < 3:
+        severity = "MILD" if severity == "SEVERE" else "NONE"
+
+    if severity == "NONE":
+        return NightmareResult(
+            available=True,
+            is_nightmare=False,
+            style_f1=style_f1,
+            style_f2=style_f2,
+            severity="NONE",
+        )
+
+    matchup_label = f"{style_f1}_VS_{style_f2}"
+
+    return NightmareResult(
+        available=True,
+        is_nightmare=True,
+        nightmare_fighter=nightmare_ctx.name,
+        style_f1=style_f1,
+        style_f2=style_f2,
+        matchup_label=matchup_label,
+        severity=severity,
     )
