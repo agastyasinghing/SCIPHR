@@ -6,54 +6,18 @@ Badges are assigned PER FIGHTER (each Badge has a .fighter field).
 badge_engine is called last in the orchestrator pipeline because it
 depends on all other modules' outputs.
 
-All module result inputs may be None (if _safe_compute caught an error).
-badge_engine must handle every combination gracefully — missing a module
-input means skipping the badges that required it.
-
-Badge vocabulary (from CLAUDE.md — use these names exactly):
-    FRAUD_CHECK       amber   — fighter is overvalued + faces nightmare matchup
-    DOG_WITH_TEETH    orange  — underdog is undervalued by public
-    FALSE_FAVORITE    red     — fighter is overvalued by public
-    DECISION_PRISONER gray    — fighter's only win path is decisions
-    ROUND_ONE_DEMON   red     — very high first-round finish rate
-    NARRATIVE_HOSTAGE purple  — fight has HIGH narrative risk for this fighter
-    CHAOS_CERTIFIED   yellow  — fight chaos score is HIGH or EXTREME
-    SILENT_KILLER     teal    — dominant grappler flying under public radar
-    PUBLIC_TAX        gold    — public paying a premium for name recognition
-    AURA_MERCHANT     violet  — fighter sustained by narrative/aura more than stats
-    CASUAL_MIRAGE     pink    — high casual recognition, declining statistical output
-
-─────────────────────────────────────────────────────────────────────
-TODO(opus): Implement the badge assignment logic.
-
-For each badge, Opus must define:
-    1. Which module results are required (and what to do if None)
-    2. The threshold condition that fires the badge
-    3. Which fighter the badge is assigned to (f1, f2, or both)
-    4. A concise reason string explaining why it fired
-
-Suggested badge-to-signal mapping (Opus to refine):
-    CHAOS_CERTIFIED   → chaos.score >= threshold (e.g. 65)
-    FALSE_FAVORITE    → gap.overvalued_fighter is not None
-    DOG_WITH_TEETH    → gap.undervalued_fighter is not None + win_path.available
-    NARRATIVE_HOSTAGE → narrative.risk == "HIGH"
-    FRAUD_CHECK       → gap.overvalued_fighter + nightmare.is_nightmare (same fighter)
-    SILENT_KILLER     → win_path paths dominated by GROUND_AND_POUND/SUBMISSION
-                        + perception_gap shows fighter is undervalued
-    DECISION_PRISONER → all win_path.f1_paths are DECISION_* variants
-    ROUND_ONE_DEMON   → EARLY_KO path is ranked #1 in win_path.f1_paths
-    PUBLIC_TAX        → aura_score >> model_prob (fighter costs more in odds
-                        than their model-estimated quality justifies)
-    AURA_MERCHANT     → high aura_score + declining recent record (losses or
-                        late stoppages)
-    CASUAL_MIRAGE     → high aura + low actual stats (slpm < median but
-                        high name recognition)
-
-BADGE_META in models.py has label + color for each key — use it:
-    from .models import BADGE_META
-    Badge(key=k, label=BADGE_META[k]["label"], color=BADGE_META[k]["color"],
-          reason=reason, fighter=fighter_name)
-─────────────────────────────────────────────────────────────────────
+Badge-to-signal mapping:
+    CHAOS_CERTIFIED   chaos.score >= 65
+    NARRATIVE_HOSTAGE  narrative.risk == "HIGH"
+    FALSE_FAVORITE     gap.overvalued_fighter is not None
+    DOG_WITH_TEETH     gap.undervalued_fighter is not None
+    FRAUD_CHECK        gap.overvalued + nightmare.is_nightmare on same fighter
+    SILENT_KILLER      win paths dominated by grappling + fighter undervalued
+    DECISION_PRISONER  all win paths are DECISION_* variants
+    ROUND_ONE_DEMON    EARLY_KO is #1 ranked path with probability > 0.25
+    PUBLIC_TAX         aura_score > 0.6 AND gap shows fighter overvalued
+    AURA_MERCHANT      high aura + recent losses (declining record)
+    CASUAL_MIRAGE      high aura + low offensive stats
 """
 
 from __future__ import annotations
@@ -74,6 +38,42 @@ from .models import (
 )
 
 
+def _badge(key: str, reason: str, fighter: str) -> Badge:
+    """Create a Badge with label/color from BADGE_META."""
+    return Badge(
+        key=key,
+        label=BADGE_META[key]["label"],
+        color=BADGE_META[key]["color"],
+        reason=reason,
+        fighter=fighter,
+    )
+
+
+def _top_path(paths: list[dict]) -> Optional[str]:
+    """Return the label of the first (highest-probability) path, or None."""
+    return paths[0]["path"] if paths else None
+
+
+def _top_prob(paths: list[dict]) -> float:
+    """Return the probability of the top path, or 0."""
+    return float(paths[0]["probability"]) if paths else 0.0
+
+
+def _is_decision_only(paths: list[dict]) -> bool:
+    """True if all paths with meaningful probability are DECISION_* variants."""
+    dec_labels = {"DECISION_VOLUME", "DECISION_COUNTER", "SPLIT_DECISION"}
+    # Consider paths with > 10% probability
+    significant = [p for p in paths if p.get("probability", 0) > 0.10]
+    return bool(significant) and all(p["path"] in dec_labels for p in significant)
+
+
+def _grappling_dominant(paths: list[dict]) -> bool:
+    """True if top 2 paths are grappling-based."""
+    grapple_labels = {"GROUND_AND_POUND", "SUBMISSION", "TAKEDOWN_CONTROL"}
+    top2 = [p["path"] for p in paths[:2]]
+    return len(top2) >= 1 and all(p in grapple_labels for p in top2)
+
+
 def compute(
     chaos: Optional[ChaosResult] = None,
     gap: Optional[PerceptionGapResult] = None,
@@ -83,35 +83,13 @@ def compute(
     consensus: Optional[FalseConsensusResult] = None,
     nightmare: Optional[NightmareResult] = None,
     win: Optional[WinPathResult] = None,
+    f1_name: Optional[str] = None,
+    f2_name: Optional[str] = None,
 ) -> list[Badge]:
-    """
-    Assign SCIPHR badges based on all available intelligence module outputs.
-
-    Any input may be None (module failed or not yet implemented).
-    When a required input is None, the badge(s) that depend on it are skipped.
-
-    Args:
-        chaos:     ChaosResult from chaos_scorer.
-        gap:       PerceptionGapResult from perception_gap.
-        narrative: NarrativeTrapResult from narrative_trap.
-        value:     ValueBetResult from value_bet.
-        dna:       FightDNAResult from fight_dna.
-        consensus: FalseConsensusResult from false_consensus.
-        nightmare: NightmareResult from nightmare_matchup.
-        win:       WinPathResult from win_path.
-
-    Returns:
-        list[Badge] — may be empty if all inputs are None or no thresholds
-        fire for this matchup.
-    """
+    """Assign SCIPHR badges based on all available intelligence module outputs."""
     badges: list[Badge] = []
 
-    # ── Early return: no actionable signals present ───────────────────────
-    # Check whether any module produced data that could actually fire a badge.
-    # "Available" modules with empty/default values (narrative risk=LOW,
-    # value_bet NO_ODDS/inactive) carry no badge-worthy signals.
-    # This gate prevents the stub from raising NotImplementedError when
-    # there is genuinely nothing to badge.
+    # ── Early return: no actionable signals present ───────────────────
     def _has_actionable_data() -> bool:
         if chaos is not None and chaos.available:
             return True
@@ -134,23 +112,137 @@ def compute(
     if not _has_actionable_data():
         return badges
 
-    # TODO(opus): Implement badge assignment logic.
-    #
-    # For each badge:
-    #   1. Check if required module inputs are not None and available
-    #   2. Evaluate threshold condition
-    #   3. Create Badge using BADGE_META for label/color:
-    #      Badge(
-    #          key="CHAOS_CERTIFIED",
-    #          label=BADGE_META["CHAOS_CERTIFIED"]["label"],
-    #          color=BADGE_META["CHAOS_CERTIFIED"]["color"],
-    #          reason="Both fighters have 75%+ finish rate and contrasting styles.",
-    #          fighter="<fighter_name>",
-    #      )
-    #   4. Append to badges list
-    #
-    # See module docstring for badge-to-signal mapping guide.
-    raise NotImplementedError(
-        "badge_engine formula: implement in Opus session. "
-        "See module docstring for badge-to-signal mapping."
-    )
+    # ── CHAOS_CERTIFIED ───────────────────────────────────────────────
+    if chaos is not None and chaos.available and chaos.score >= 65:
+        drivers_str = ", ".join(chaos.drivers[:2]) if chaos.drivers else "volatile matchup"
+        badges.append(_badge(
+            "CHAOS_CERTIFIED",
+            f"Chaos Score {chaos.score:.0f} — {drivers_str}",
+            "matchup",
+        ))
+
+    # ── NARRATIVE_HOSTAGE ─────────────────────────────────────────────
+    if narrative is not None and narrative.risk == "HIGH":
+        traps_str = ", ".join(narrative.active_traps[:2]) if narrative.active_traps else "high narrative risk"
+        fighter = narrative.trapped_fighter or "matchup"
+        badges.append(_badge(
+            "NARRATIVE_HOSTAGE",
+            f"HIGH narrative risk: {traps_str}",
+            fighter,
+        ))
+
+    # ── FALSE_FAVORITE ────────────────────────────────────────────────
+    if gap is not None and gap.available and gap.overvalued_fighter:
+        ov_gap = gap.gap_f1 if gap.gap_f1 < 0 else gap.gap_f2
+        badges.append(_badge(
+            "FALSE_FAVORITE",
+            f"{gap.overvalued_fighter} is overvalued by public perception (gap {ov_gap:+.0%})",
+            gap.overvalued_fighter,
+        ))
+
+    # ── DOG_WITH_TEETH ────────────────────────────────────────────────
+    if gap is not None and gap.available and gap.undervalued_fighter:
+        badges.append(_badge(
+            "DOG_WITH_TEETH",
+            f"{gap.undervalued_fighter} is undervalued — model sees hidden edge",
+            gap.undervalued_fighter,
+        ))
+
+    # ── FRAUD_CHECK — overvalued + nightmare matchup ──────────────────
+    if (
+        gap is not None and gap.available and gap.overvalued_fighter
+        and nightmare is not None and nightmare.is_nightmare
+        and nightmare.nightmare_fighter == gap.overvalued_fighter
+    ):
+        badges.append(_badge(
+            "FRAUD_CHECK",
+            f"{gap.overvalued_fighter} is overvalued AND faces nightmare matchup ({nightmare.matchup_label})",
+            gap.overvalued_fighter,
+        ))
+
+    # ── PUBLIC_TAX — paying a premium for name recognition ────────────
+    if gap is not None and gap.available and gap.overvalued_fighter:
+        # Check if the overvalued fighter has high aura
+        ov_is_f1 = gap.overvalued_fighter is not None and gap.gap_f1 < -0.10
+        aura = gap.aura_score_f1 if ov_is_f1 else gap.aura_score_f2
+        if aura > 0.6:
+            badges.append(_badge(
+                "PUBLIC_TAX",
+                f"Public paying premium for {gap.overvalued_fighter} (aura {aura:.0%})",
+                gap.overvalued_fighter,
+            ))
+
+    # ── ROUND_ONE_DEMON ───────────────────────────────────────────────
+    if win is not None and win.available:
+        for paths, fname in [(win.f1_paths, f1_name), (win.f2_paths, f2_name)]:
+            if _top_path(paths) == "EARLY_KO" and _top_prob(paths) > 0.25:
+                badges.append(_badge(
+                    "ROUND_ONE_DEMON",
+                    f"EARLY_KO is dominant win path ({_top_prob(paths):.0%})",
+                    fname or "matchup",
+                ))
+                break  # one ROUND_ONE_DEMON per fight is enough
+
+    # ── DECISION_PRISONER ─────────────────────────────────────────────
+    if win is not None and win.available:
+        for paths, fname in [(win.f1_paths, f1_name), (win.f2_paths, f2_name)]:
+            if _is_decision_only(paths):
+                badges.append(_badge(
+                    "DECISION_PRISONER",
+                    "Only viable win paths are decision variants",
+                    fname or "matchup",
+                ))
+                break
+
+    # ── SILENT_KILLER — dominant grappler under public radar ──────────
+    if (
+        win is not None and win.available
+        and gap is not None and gap.available
+        and gap.undervalued_fighter
+    ):
+        for paths, threat in [
+            (win.f1_paths, win.f1_primary_threat),
+            (win.f2_paths, win.f2_primary_threat),
+        ]:
+            if _grappling_dominant(paths) and threat in ("GRAPPLING", "WRESTLING"):
+                badges.append(_badge(
+                    "SILENT_KILLER",
+                    f"Dominant grappler flying under public radar",
+                    gap.undervalued_fighter,
+                ))
+                break
+
+    # ── AURA_MERCHANT — high aura but declining output ────────────────
+    if gap is not None and gap.available:
+        for aura, fname in [
+            (gap.aura_score_f1, f1_name),
+            (gap.aura_score_f2, f2_name),
+        ]:
+            if aura > 0.65 and consensus is not None and consensus.is_coinflip:
+                badges.append(_badge(
+                    "AURA_MERCHANT",
+                    "High public perception sustained by narrative, not recent performance",
+                    fname or "matchup",
+                ))
+                break
+
+    # ── CASUAL_MIRAGE — high recognition, low statistical output ──────
+    if (
+        gap is not None and gap.available
+        and dna is not None and dna.available
+    ):
+        for aura, dna_profile in [
+            (gap.aura_score_f1, dna.f1_dna),
+            (gap.aura_score_f2, dna.f2_dna),
+        ]:
+            striking = dna_profile.get("striking", 0)
+            pressure = dna_profile.get("pressure", 0)
+            if aura > 0.6 and striking < 0.4 and pressure < 0.4:
+                badges.append(_badge(
+                    "CASUAL_MIRAGE",
+                    "High name recognition but low offensive statistical output",
+                    "matchup",
+                ))
+                break
+
+    return badges

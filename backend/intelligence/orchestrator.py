@@ -182,6 +182,8 @@ class IntelligenceOrchestrator:
                 consensus=consensus_res,
                 nightmare=nightmare_res,
                 win=win_res,
+                f1_name=f1_name,
+                f2_name=f2_name,
             ),
             module_name="badge_engine",
         ) or []

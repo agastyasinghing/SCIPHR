@@ -5,51 +5,11 @@ decisive but are actually coinflips.
 Display name: Invisible Coinflip
 Badge it powers: FALSE_FAVORITE (red) — shared with perception_gap
 
-─────────────────────────────────────────────────────────────────────
-TODO(opus): Implement the false consensus / invisible coinflip formula.
-
-Concept:
-    The public perceives one fighter as a clear favourite (high aura score
-    disparity in perception_gap), but the model sees a near-coinflip
-    (abs(prob_f1 - prob_f2) < threshold).
-    This is the "Invisible Coinflip" — the market is confidently wrong.
-
-Inputs available:
-    f1_ctx, f2_ctx   — fighter contexts
-    chaos_res        — ChaosResult (may be None if chaos_scorer failed)
-    model_probs      — (prob_f1, prob_f2) from XGBoost
-
 Key signal:
     actual_gap = abs(prob_f1 - prob_f2)
-    If actual_gap < coinflip_threshold AND chaos_res.score > chaos_threshold:
-        is_coinflip = True
+    coinflip when: actual_gap < 0.12 AND (chaos HIGH+ OR gap very tight)
 
-Coinflip threshold (Opus to calibrate):
-    A fight is an "invisible coinflip" when model sees < X% probability gap.
-    Suggested starting point: actual_gap < 0.12 (within 12pp of 50/50).
-    Adjust based on dataset distribution of model probability gaps.
-
-Chaos cross-reference:
-    chaos_res can deepen the signal — a high-chaos fight that ALSO looks
-    like a coinflip is a stronger invisible coinflip signal.
-    If chaos_res is None, still compute false_consensus from model_probs alone.
-
-consensus_fighter logic:
-    Which fighter does the public think is the clear favourite?
-    Proxy: the fighter with the higher historical win rate in similar
-    weight classes, or the higher aura_score from perception_gap.
-    Since false_consensus doesn't have perception_gap as input,
-    use fight record (wins/losses) as the public consensus proxy.
-
-Expected output:
-    FalseConsensusResult(
-        available=True,
-        is_coinflip=True | False,
-        consensus_fighter="Fighter Name" | None,
-        actual_gap=float in [0.0, 1.0],
-        label="INVISIBLE_COINFLIP" | "NONE",
-    )
-─────────────────────────────────────────────────────────────────────
+consensus_fighter: the fighter with the better public record.
 """
 
 from __future__ import annotations
@@ -59,27 +19,52 @@ from typing import Optional
 from .models import ChaosResult, FalseConsensusResult, FighterContext
 
 
+# A fight is an "invisible coinflip" when model sees < 12pp gap
+_COINFLIP_THRESHOLD = 0.12
+# Even without chaos data, a very tight gap triggers coinflip
+_TIGHT_THRESHOLD = 0.08
+# Chaos score that strengthens the coinflip signal
+_CHAOS_HIGH = 55.0
+
+
 def compute(
     f1_ctx: FighterContext,
     f2_ctx: FighterContext,
     chaos: Optional[ChaosResult],
     model_probs: tuple[float, float],
 ) -> FalseConsensusResult:
-    """
-    Detect whether this fight is an invisible coinflip.
+    """Detect whether this fight is an invisible coinflip."""
+    prob_f1, prob_f2 = model_probs
+    actual_gap = abs(prob_f1 - prob_f2)
 
-    Args:
-        f1_ctx:      Pre-loaded context for fighter 1.
-        f2_ctx:      Pre-loaded context for fighter 2.
-        chaos:       ChaosResult from chaos_scorer (may be None).
-        model_probs: (prob_f1, prob_f2) from XGBoost prediction.
+    # Is the model probability close enough to be a coinflip?
+    is_close = actual_gap < _COINFLIP_THRESHOLD
 
-    Returns:
-        FalseConsensusResult.
+    # Chaos cross-reference: high-chaos + close model = strong coinflip
+    chaos_high = (
+        chaos is not None
+        and chaos.available
+        and chaos.score >= _CHAOS_HIGH
+    )
 
-    TODO(opus): Implement the coinflip detection logic.
-    """
-    raise NotImplementedError(
-        "false_consensus formula: implement in Opus session. "
-        "See module docstring for coinflip threshold calibration guide."
+    is_coinflip = is_close and (chaos_high or actual_gap < _TIGHT_THRESHOLD)
+
+    # Consensus fighter: who does the public perceive as favourite?
+    f1_total = f1_ctx.wins + f1_ctx.losses + f1_ctx.draws
+    f2_total = f2_ctx.wins + f2_ctx.losses + f2_ctx.draws
+    f1_rate = f1_ctx.wins / f1_total if f1_total > 0 else 0.0
+    f2_rate = f2_ctx.wins / f2_total if f2_total > 0 else 0.0
+
+    consensus: Optional[str] = None
+    if abs(f1_rate - f2_rate) > 0.05:
+        consensus = f1_ctx.name if f1_rate > f2_rate else f2_ctx.name
+
+    label = "INVISIBLE_COINFLIP" if is_coinflip else "NONE"
+
+    return FalseConsensusResult(
+        available=True,
+        is_coinflip=is_coinflip,
+        consensus_fighter=consensus if is_coinflip else None,
+        actual_gap=round(actual_gap, 4),
+        label=label,
     )
