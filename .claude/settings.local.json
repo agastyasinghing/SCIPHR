@@ -42,7 +42,10 @@
       "Bash(python -m pytest tests/ -q)",
       "Bash(git commit -m 'feat: wire badge_engine with 11 SCIPHR badge rules + fighter-name propagation:*)",
       "Bash(git commit -m 'test: activate all Phase 2 formula tests \\(174/174 passing\\):*)",
-      "Bash(python -m pytest tests/ -x -q)"
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m pytest tests/test_orchestrator.py -v)",
+      "Bash(python -m pytest tests/test_upset_alert.py tests/test_sharp_money.py tests/test_cinematic_title.py -v)",
+      "Bash(python -m pytest tests/test_sharp_money.py -v)"
     ]
   }
 }
