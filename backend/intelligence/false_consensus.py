@@ -59,7 +59,31 @@ def compute(
     if abs(f1_rate - f2_rate) > 0.05:
         consensus = f1_ctx.name if f1_rate > f2_rate else f2_ctx.name
 
-    label = "INVISIBLE_COINFLIP" if is_coinflip else "NONE"
+    # ── Label and display message ─────────────────────────────────────
+    # Using actual model gap (abs(prob_f1 - prob_f2)) as proxy.
+    # Phase 3 will wire in implied_prob for true consensus_gap per PRD §10.14
+    # (PRD's thresholds apply to market vs model gap, a different measurement).
+    if not is_coinflip:
+        label = "NONE"
+        message = ""
+    elif actual_gap < 0.05:
+        # Near-perfect 50/50: tightest possible coinflip
+        label = "INVISIBLE_COINFLIP"
+        message = (
+            "The public sees a walkover. The model sees a coinflip. "
+            "Someone is very wrong."
+        )
+    elif actual_gap < 0.09:
+        label = "FAKE_MISMATCH"
+        message = "This fight is being sold as obvious. The data disagrees significantly."
+    elif actual_gap < 0.12:
+        label = "PUBLIC_CERTAINTY_TRAP"
+        message = (
+            "Market confidence exceeds what the model justifies. Proceed with caution."
+        )
+    else:
+        label = "MILD_OVERCONFIDENCE"
+        message = "Mild market overconfidence detected — model sees this closer than odds suggest."
 
     return FalseConsensusResult(
         available=True,
@@ -67,4 +91,5 @@ def compute(
         consensus_fighter=consensus if is_coinflip else None,
         actual_gap=round(actual_gap, 4),
         label=label,
+        display_message=message,
     )
