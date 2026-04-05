@@ -9,7 +9,7 @@
 |---|---|---|
 | Phase 0 — P0 Bugs + Git Setup | ✅ Complete | All 13 bugs fixed, 7/7 tests passing |
 | Phase 1 — Database Migration | ✅ Complete | 8,231 fights + 2,615 fighters migrated to Supabase |
-| Phase 2 — Intelligence Engine | 🟡 In Progress | Scaffolding + stubs built; Opus sessions needed for formulas |
+| Phase 2 — Intelligence Engine | ✅ Complete | All 9 modules implemented; upset_alert, sharp_money, cinematic_title done (44/44 tests) |
 | Phase 3 — API Layer | ✅ Complete | Intelligence wired, /health, /events, Sentry |
 | Phase 4 — Frontend Wiring | 🔴 Not Started | api.js + UI components |
 | Phase 5 — Claude + Poster | 🔴 Not Started | AI analysis + poster |
@@ -18,13 +18,13 @@
 ---
 
 ## Current State
-**What exists:** FastAPI backend + React v2 frontend (moved to frontend/). XGBoost model working at 85.7% accuracy. Core prediction endpoint functional. Fighter search working. All P0 bugs fixed. PostgreSQL on Supabase live with 8,231 fights + 2,615 fighters. All 9 intelligence modules scaffolded (3 still stubs). Full intelligence bundle returned from /predict.
+**What exists:** FastAPI backend + React v2 frontend (moved to frontend/). XGBoost model working at 85.7% accuracy. Core prediction endpoint functional. Fighter search working. All P0 bugs fixed. PostgreSQL on Supabase live with 8,231 fights + 2,615 fighters. All 9 intelligence modules implemented and tested. Full intelligence bundle returned from /predict.
 
 **What is broken:** Nothing critical. See user actions required below.
 
 **What is fake:** Dashboard data 100% hardcoded. `generate_recent_record()` in main.py uses random.seed() to fabricate W/L history — this is a known placeholder. Model performance metrics hardcoded.
 
-**What is missing:** Frontend wired to intelligence signals, real events data for upcoming cards, 3 intelligence formula stubs (upset_alert, sharp_money, cinematic_title).
+**What is missing:** Frontend wired to intelligence signals, real events data for upcoming cards.
 
 ---
 
@@ -35,14 +35,14 @@
 ---
 
 ## In Progress
-Phase 4 — Frontend Wiring (next up). Phase 2 intelligence stubs still need Opus sessions.
+Phase 4 — Frontend Wiring (next up). Phase 2 intelligence engine complete.
 
 ---
 
 ## Next 3 Tasks
-1. Open Opus sessions for remaining intelligence formulas: upset_alert → sharp_money → cinematic_title (stubs, NotImplementedError)
-2. Start Phase 4: wire api.js into all components; render intelligence badges in Simple Mode
-3. Fix Claude analysis async gap: `ai_analyst.generate_fight_analysis()` is called synchronously in /predict — user waits up to 3s. Wrap in asyncio.to_thread or background task; return analysis_loading=true immediately
+1. Start Phase 4: wire api.js into all components; render intelligence badges in Simple Mode
+2. Build Historical Scorecard page (deferred from Phase 3; resolve OQ-11 seeding strategy)
+3. Fix Claude analysis async gap (already partially addressed by POST /generate-ai-analysis — verify frontend calls it post-predict)
 
 ---
 
@@ -99,7 +99,7 @@ Phase 4 — Frontend Wiring (next up). Phase 2 intelligence stubs still need Opu
 | Apr 2026 | Sync SQLAlchemy + psycopg2 (not asyncpg) | Prediction pipeline is sync Python; FastAPI threadpools sync calls automatically |
 | Apr 2026 | Schema via create_all(), Alembic deferred to Phase 6 | Schema stable after Phase 1; see TODOS.md TODO-01 |
 | Apr 2026 | ChaosResult.label renamed to .tier, MODERATE→MIXED | PRD §10.6 uses 'tier' and 'MIXED'; 'label' was a naming deviation. All tests updated. |
-| Apr 2026 | upset_alert, sharp_money, cinematic_title: stubs only (NotImplementedError) | Compute formulas require Opus; structure + models complete; wired to orchestrator. |
+| Apr 2026 | upset_alert, sharp_money, cinematic_title: implemented per PRD §10.8/§10.9/§10.17 | 44/44 tests pass. upset_alert: NO_ODDS fallback + UNDERDOG_EDGE (model≥0.45, american≥+150, edge≥0.08). sharp_money: opening vs current implied, 0.03 movement threshold. cinematic_title: 18-template priority ladder, weight-class color map. |
 | Apr 2026 | FalseConsensusResult expanded to 4 labels (not 2); added display_message | PRD §10.14 requires INVISIBLE_COINFLIP/FAKE_MISMATCH/PUBLIC_CERTAINTY_TRAP/MILD_OVERCONFIDENCE |
 | Apr 2026 | PerceptionGapResult: added direction_f1/f2 (OVERHYPED/UNDERRATED/ALIGNED) and magnitude | PRD §10.5 display spec requires "Perception Gap: +23pts (Overhyped)" — direction fields enable this |
 | Apr 2026 | chaos_scorer accepts event_fight dict; short_notice (+8pts) weight_miss (+5pts) applied | PRD §10.6 lists both as explicit chaos factors; orchestrator now passes event_fight through |
