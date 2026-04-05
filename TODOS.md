@@ -320,3 +320,38 @@ Replace `print(f"PREDICTION REQUEST: ...")` with `log.info(...)`,
 verbose traces with `log.debug(...)`, and error blocks with `log.error(...)`.
 
 **Depends on:** Nothing. Standalone cleanup pass.
+
+---
+
+## TODO-12 — /health response field names (fix before deploy)
+
+**What:** `/health` currently returns `{status, db, model}`.
+PRD §13 specifies `{status, model_loaded, db_connected, version}`.
+
+**Why deferred:** Field names are cosmetic and no frontend code depends on them yet.
+Renaming before frontend is wired avoids breaking the health check once it's used.
+
+**Where to fix:** `main.py` `health_check()` function.
+Rename: `db` → `db_connected`, `model` → `model_loaded`.
+Add: `version` field populated from `os.getenv("APP_VERSION", "unknown")`.
+
+**Depends on:** Nothing. Fix before Phase 6 deploy.
+
+---
+
+## TODO-13 — Parallel intelligence orchestrator (v2)
+
+**What:** `IntelligenceOrchestrator.compute()` runs all 11 modules sequentially.
+PRD §9 event flow step 6 specifies "Intelligence Engine runs in parallel."
+
+**Why deferred:** Sequential execution is well within the <600ms latency budget
+for v1 traffic volumes. Parallelism adds complexity (ThreadPoolExecutor or
+asyncio.gather with sync-to-async wrapping) for minimal gain at v1 scale.
+
+**Where to start:** In `intelligence/orchestrator.py`, replace the sequential
+`_safe_compute()` calls with `concurrent.futures.ThreadPoolExecutor` or convert
+orchestrator to async and use `asyncio.gather(*[asyncio.to_thread(_safe_compute, m) for m in modules])`.
+Run the 5 DB queries first (they must precede module calls), then fan out.
+
+**Depends on:** Phase 6 load testing to confirm whether latency budget is actually
+exceeded at realistic concurrency. Don't do this speculatively.

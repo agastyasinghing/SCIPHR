@@ -58,7 +58,8 @@ predictor = None
 engine = None
 orchestrator = None
 events_data: dict = {"events": []}
-events_index: dict = {}  # fight_id (int) → fight dict, built at startup
+events_index: dict = {}   # fight_id (int) → fight dict, built at startup
+events_by_id: dict = {}   # event_id (int) → full event dict, built at startup
 
 
 def _load_events() -> dict:
@@ -89,7 +90,7 @@ def _load_events() -> dict:
 
 @app.on_event("startup")
 async def startup_event():
-    global predictor, engine, orchestrator, events_data, events_index
+    global predictor, engine, orchestrator, events_data, events_index, events_by_id
 
     # ── Database ──────────────────────────────────────────────────────────
     database_url = os.getenv("DATABASE_URL")
@@ -124,6 +125,9 @@ async def startup_event():
     # To pick up new events, restart the server.
     events_data = _load_events()
     for event in events_data.get("events", []):
+        eid = event.get("event_id")
+        if eid is not None:
+            events_by_id[int(eid)] = event
         for fight in event.get("fights", []):
             fid = fight.get("fight_id")
             if fid is not None:
@@ -142,9 +146,23 @@ class PredictionRequest(BaseModel):
     fight_id: Optional[int] = None  # links prediction to events_index for event context
 
 
+class SimplePredictionRequest(BaseModel):
+    fighter1: str
+    fighter2: str
+
+
 class DetailedStatsRequest(BaseModel):
     fighter1_name: str
     fighter2_name: str
+
+
+class AIAnalysisRequest(BaseModel):
+    fighter1: str
+    fighter2: str
+    winner: str
+    confidence: float
+    fighter1_stats: dict
+    fighter2_stats: dict
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -233,22 +251,53 @@ async def get_events():
     return {"events": events_data.get("events", [])}
 
 
-@app.get("/events/{fight_id}")
-async def get_event_fight(fight_id: int):
+@app.get("/events/upcoming")
+async def get_upcoming_event():
     """
-    Return the event context for a specific fight by fight_id.
+    Return the next upcoming event (closest future date).
+    Falls back to the most recent past event when no future events are loaded.
 
-    This dict is passed as event_fight to IntelligenceOrchestrator when
-    /predict is called with fight_id — enables narrative_trap tags,
-    chaos short_notice/weight_miss signals, and cinematic title generation.
+    Used by the Dashboard to display the current/next fight card.
+    events.json must be updated each fight week — see CLAUDE.md §Build Order.
     """
-    fight = events_index.get(fight_id)
-    if fight is None:
+    from datetime import date as _date
+    today = str(_date.today())
+    all_events = events_data.get("events", [])
+
+    upcoming = sorted(
+        [e for e in all_events if e.get("date", "") >= today],
+        key=lambda e: e.get("date", ""),
+    )
+    if upcoming:
+        return upcoming[0]
+
+    past = sorted(
+        [e for e in all_events if e.get("date", "") < today],
+        key=lambda e: e.get("date", ""),
+        reverse=True,
+    )
+    if past:
+        return past[0]
+
+    raise HTTPException(status_code=404, detail="No events found")
+
+
+@app.get("/events/{event_id}")
+async def get_event(event_id: int):
+    """
+    Return the full event card (all fights) for the given event_id.
+
+    event_id corresponds to the top-level 'event_id' field in events.json,
+    not to individual fight_ids.  Use fight_id in POST /predict to link
+    a prediction to event context.
+    """
+    event = events_by_id.get(event_id)
+    if event is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Fight ID {fight_id} not found in events data",
+            detail=f"Event ID {event_id} not found",
         )
-    return fight
+    return event
 
 
 @app.get("/fighters")
@@ -332,6 +381,86 @@ async def get_fighter_profile(fighter_name: str):
     }
 
 
+@app.get("/fighter/{fighter_name}/history")
+async def get_fighter_history(fighter_name: str):
+    """
+    Return the last 20 fights for a fighter in reverse chronological order.
+
+    Uses fuzzy name matching (search_fighter) when predictor is loaded.
+    Each fight includes: opponent, date, result (W/L), method, weight_class.
+    """
+    if engine is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+
+    from urllib.parse import unquote
+    fighter_name = unquote(fighter_name)
+
+    # Apply fuzzy match if predictor is ready; fall back to exact name otherwise
+    if predictor is not None:
+        matched = predictor.search_fighter(fighter_name)
+        if matched:
+            fighter_name = matched
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT r_name, b_name, date, winner, method, weight_class
+                FROM fights
+                WHERE r_name = :name OR b_name = :name
+                ORDER BY date DESC
+                LIMIT 20
+            """),
+            {"name": fighter_name},
+        ).fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No fight history found for '{fighter_name}'")
+
+    history = []
+    for row in rows:
+        opponent = row.b_name if row.r_name == fighter_name else row.r_name
+        history.append({
+            "opponent": opponent,
+            "date": str(row.date),
+            "result": "W" if row.winner == fighter_name else "L",
+            "method": row.method or "",
+            "weight_class": row.weight_class or "",
+        })
+
+    return {"name": fighter_name, "fights": history, "count": len(history)}
+
+
+@app.post("/predict/simple")
+async def predict_fight_simple(request: SimplePredictionRequest):
+    """
+    Fast prediction path — returns winner + confidence only.
+    Skips the intelligence orchestrator entirely.
+
+    Use this for low-latency contexts (e.g. bulk previews, dashboard cards).
+    For the full intelligence bundle use POST /predict.
+    """
+    if request.fighter1.strip().lower() == request.fighter2.strip().lower():
+        raise HTTPException(
+            status_code=400,
+            detail="Fighter 1 and Fighter 2 must be different fighters",
+        )
+    if predictor is None:
+        raise HTTPException(status_code=500, detail="Predictor not initialized")
+
+    result = predictor.predict_fight(request.fighter1, request.fighter2, verbose=False)
+    if result is None:
+        raise HTTPException(status_code=404, detail="One or both fighters not found")
+
+    return {
+        "fighter1": result["fighter1"],
+        "fighter2": result["fighter2"],
+        "winner": result["winner"],
+        "confidence": float(result["confidence"]),
+        "prob_fighter1": float(result["prob_fighter1"]),
+        "prob_fighter2": float(result["prob_fighter2"]),
+    }
+
+
 @app.post("/predict")
 async def predict_fight(request: PredictionRequest):
     """
@@ -393,11 +522,9 @@ async def predict_fight(request: PredictionRequest):
         )
         print("✓ Intelligence computed")
 
-        # Generate AI analysis (template fallback if Claude API unavailable)
-        print("Generating AI analysis...")
-        ai_analysis = ai_analyst.generate_fight_analysis(result)
-        print("AI analysis complete")
-
+        # AI analysis is NOT generated here — it is async and non-blocking.
+        # The frontend calls POST /generate-ai-analysis separately after the
+        # prediction renders.  ai_analysis: null is the intentional response.
         if not result.get('fighter1_stats') or not result.get('fighter2_stats'):
             print(f"⚠️ fighter stats missing from predictor result for {result['fighter1']} vs {result['fighter2']}")
 
@@ -409,7 +536,7 @@ async def predict_fight(request: PredictionRequest):
             "prob_fighter2": float(result['prob_fighter2']),
             "winner": result['winner'],
             "confidence": float(result['confidence']),
-            "ai_analysis": ai_analysis,
+            "ai_analysis": None,  # populated async via POST /generate-ai-analysis
             # predictor.predict_fight() fetches fighter stats internally —
             # use those directly to avoid redundant DB queries.
             "fighter1_stats": convert_numpy(result.get('fighter1_stats') or {}),
@@ -426,8 +553,19 @@ async def predict_fight(request: PredictionRequest):
         # try/except ensures a DB failure here never fails the response.
         try:
             from db.models import PredictionLog
+            from sqlalchemy import insert
+
+            # Build odds snapshot from value_bet result if odds are available.
+            # value_bet.signal == NO_ODDS when no odds_history rows exist for this fight.
+            vb = intel_result.value_bet
+            odds_snapshot = None
+            if vb.signal != "NO_ODDS" and vb.implied_prob_f1 is not None and vb.implied_prob_f2 is not None:
+                odds_snapshot = {
+                    response["fighter1"]: {"implied": float(vb.implied_prob_f1)},
+                    response["fighter2"]: {"implied": float(vb.implied_prob_f2)},
+                }
+
             with engine.begin() as conn:
-                from sqlalchemy import insert
                 conn.execute(
                     insert(PredictionLog).values(
                         fighter1=response["fighter1"],
@@ -436,6 +574,7 @@ async def predict_fight(request: PredictionRequest):
                         confidence=response["confidence"],
                         prob_f1=response["prob_fighter1"],
                         prob_f2=response["prob_fighter2"],
+                        odds_at_prediction=odds_snapshot,
                     )
                 )
         except Exception as log_err:
@@ -525,6 +664,43 @@ async def create_ai_poster(request: Request, poster_request: AIPosterRequest):
         print(f"ERROR IN AI POSTER GENERATION:")
         print(traceback.format_exc())
         print(f"{'='*70}\n")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate-ai-analysis")
+@limiter.limit("3/hour")
+async def generate_ai_analysis(request: Request, analysis_request: AIAnalysisRequest):
+    """
+    Generate AI fight analysis using Claude (template fallback if API unavailable).
+
+    Called by the frontend AFTER /predict renders — keeps /predict fast.
+    Rate limited to 3/hour/IP to protect Claude API costs.
+
+    Request body mirrors the fields that ai_analyst.generate_fight_analysis()
+    needs: fighter names, winner, confidence, and both fighters' stats dicts
+    (the same dicts returned in the /predict fighter1_stats/fighter2_stats fields).
+    """
+    import asyncio
+
+    prediction_data = {
+        "fighter1": analysis_request.fighter1,
+        "fighter2": analysis_request.fighter2,
+        "winner": analysis_request.winner,
+        "confidence": analysis_request.confidence,
+        "fighter1_stats": analysis_request.fighter1_stats,
+        "fighter2_stats": analysis_request.fighter2_stats,
+    }
+
+    # asyncio.to_thread runs the sync function in a thread pool — the event
+    # loop is never blocked, so other requests can proceed while Claude responds.
+    try:
+        analysis = await asyncio.to_thread(
+            ai_analyst.generate_fight_analysis, prediction_data
+        )
+        return {"analysis": analysis}
+    except Exception as e:
+        import traceback
+        print(f"AI analysis generation failed: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

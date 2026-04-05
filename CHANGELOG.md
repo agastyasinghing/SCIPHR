@@ -2,6 +2,27 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.9.0] - 2026-04-05
+
+### Added
+- `GET /events/upcoming` — returns the next upcoming event by date; falls back to most recent past event when no future events are loaded
+- `GET /events/{event_id}` — returns the full event card (all fights) by `event_id`; replaces the old `GET /events/{fight_id}` single-fight endpoint
+- `GET /fighter/{name}/history` — last 20 fights in reverse chronological order from the `fights` table; applies fuzzy name match via `search_fighter` when predictor is loaded
+- `POST /predict/simple` — fast prediction path skipping the intelligence orchestrator; returns `winner`, `confidence`, `prob_fighter1`, `prob_fighter2` only
+- `POST /generate-ai-analysis` — standalone rate-limited (3/hr/IP) Claude analysis endpoint; uses `asyncio.to_thread` so the sync `generate_fight_analysis` never blocks the event loop
+- `events_by_id` index built at startup alongside `events_index` for O(1) event card lookup
+- `AIAnalysisRequest` and `SimplePredictionRequest` Pydantic request models
+- TODOS 12–13: deferred `/health` field-name fix and parallel orchestrator (v2)
+
+### Changed
+- `POST /predict` no longer calls Claude inline; returns `ai_analysis: null` immediately — frontend calls `POST /generate-ai-analysis` asynchronously after prediction renders
+- `predictions_log` INSERT now populates `odds_at_prediction` from `value_bet.implied_prob_f1/f2` when signal is not `NO_ODDS` and both implied probs are non-null
+- Phase 3 API Layer test suite expanded from 12 to 23 tests covering all new endpoints, rate limit enforcement, blue-corner history path, and odds logging
+
+### Fixed
+- `odds_snapshot` construction now guards `implied_prob_f2 is not None` alongside `implied_prob_f1`, preventing a silent `float(None) TypeError` swallowed by the outer try/except
+- `mock_predictor.search_fighter` returns `None` by default in tests, preventing MagicMock leaking into fighter name DB queries
+
 ## [0.1.8.0] - 2026-04-05
 
 ### Added
