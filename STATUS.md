@@ -8,7 +8,7 @@
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 0 — P0 Bugs + Git Setup | ✅ Complete | All 13 bugs fixed, 7/7 tests passing |
-| Phase 1 — Database Migration | 🟡 In Progress | CSV → PostgreSQL |
+| Phase 1 — Database Migration | ✅ Complete | 8,231 fights + 2,615 fighters migrated to Supabase |
 | Phase 2 — Intelligence Engine | 🟡 In Progress | Scaffolding + stubs built; Opus sessions needed for formulas |
 | Phase 3 — API Layer | ✅ Complete | Intelligence wired, /health, /events, Sentry |
 | Phase 4 — Frontend Wiring | 🔴 Not Started | api.js + UI components |
@@ -18,13 +18,13 @@
 ---
 
 ## Current State
-**What exists:** FastAPI backend + React v2 frontend (moved to frontend/). XGBoost model working at 85.7% accuracy. Core prediction endpoint functional. Fighter search working. All P0 bugs fixed.
+**What exists:** FastAPI backend + React v2 frontend (moved to frontend/). XGBoost model working at 85.7% accuracy. Core prediction endpoint functional. Fighter search working. All P0 bugs fixed. PostgreSQL on Supabase live with 8,231 fights + 2,615 fighters. All 9 intelligence modules scaffolded (3 still stubs). Full intelligence bundle returned from /predict.
 
 **What is broken:** Nothing critical. See user actions required below.
 
-**What is fake:** Dashboard data 100% hardcoded. Fight history randomly generated. Model performance metrics hardcoded.
+**What is fake:** Dashboard data 100% hardcoded. `generate_recent_record()` in main.py uses random.seed() to fabricate W/L history — this is a known placeholder. Model performance metrics hardcoded.
 
-**What is missing:** Database, real events data, all intelligence modules, deployment config.
+**What is missing:** Frontend wired to intelligence signals, real events data for upcoming cards, 3 intelligence formula stubs (upset_alert, sharp_money, cinematic_title).
 
 ---
 
@@ -35,15 +35,14 @@
 ---
 
 ## In Progress
-Phase 1 — Database Migration (code complete, awaiting migration run against real Supabase DB).
-Phase 2 — Intelligence Engine (scaffolding complete; 9 scoring formulas need Opus sessions).
+Phase 4 — Frontend Wiring (next up). Phase 2 intelligence stubs still need Opus sessions.
 
 ---
 
 ## Next 3 Tasks
-1. Finish Phase 1: Create Supabase project + get DATABASE_URL → add to `backend/.env`, run migration
-2. Open Opus sessions for remaining intelligence formulas: upset_alert → sharp_money → cinematic_title (stubs, NotImplementedError)
-3. Start Phase 4: wire api.js into all components; intelligence signals displayed in Simple Mode (badges)
+1. Open Opus sessions for remaining intelligence formulas: upset_alert → sharp_money → cinematic_title (stubs, NotImplementedError)
+2. Start Phase 4: wire api.js into all components; render intelligence badges in Simple Mode
+3. Fix Claude analysis async gap: `ai_analyst.generate_fight_analysis()` is called synchronously in /predict — user waits up to 3s. Wrap in asyncio.to_thread or background task; return analysis_loading=true immediately
 
 ---
 
@@ -109,6 +108,36 @@ Phase 2 — Intelligence Engine (scaffolding complete; 9 scoring formulas need O
 | Apr 2026 | Phase 3: fight_id optional on PredictionRequest | Links /predict to events context (narrative_trap, chaos short_notice/weight_miss); None for ad-hoc predictions |
 | Apr 2026 | Phase 3: events.json loaded once at startup into memory | Fail-fast on missing file; zero disk I/O per request; server restart needed to pick up new events (acceptable for manual fight-week curation) |
 | Apr 2026 | Phase 3: same-fighter validation moved before predictor/orchestrator None checks | Input validation needs no initialized state; existing tests relied on this ordering |
+| Apr 2026 | /predict returns ai_analysis: null; Claude called async via POST /generate-ai-analysis | Eliminates ~3s blocking from /predict; frontend calls /generate-ai-analysis after prediction renders |
+| Apr 2026 | POST /predict/simple added (no orchestrator) | Fast path for casual users and dashboard previews; returns winner + confidence only |
+| Apr 2026 | GET /fighter/{name}/history added | Last 20 fights from fights table, fuzzy name match applied |
+| Apr 2026 | GET /events/{id} now returns full event card; GET /events/upcoming added | PRD §13 routing alignment; events_by_id index built at startup alongside events_index |
+| Apr 2026 | POST /generate-ai-analysis added (rate limited 3/hr/IP, asyncio.to_thread) | Standalone Claude endpoint; async wrapper makes sync generate_fight_analysis non-blocking |
+| Apr 2026 | predictions_log INSERT now includes odds_at_prediction from value_bet result | Populated when value_bet signal != NO_ODDS and implied probs are available |
+
+---
+
+## Phase 3 PRD Audit — Gaps vs §9 & §13 (April 2026)
+
+PRD §13 lists endpoints not implemented (and not yet covered by a logged decision):
+
+| Gap | PRD Spec | Current State | Priority |
+|---|---|---|---|
+| `POST /predict/simple` | Fast predict, no intelligence layer | Not built | P2 — useful for latency; defer to Phase 4 or skip for v1 |
+| `GET /fighter/{name}/history` | Chronological fight record | Not built | P2 — needed by Fighter Browser page in Phase 4 |
+| Events routing mismatch | `/events/upcoming` + `/events/{id}` (Event) | `/events` (all) + `/events/{fight_id}` (single fight) | P2 — routing diverges from PRD; /events/{id} should return the full event card, not one fight |
+| `GET /events/{id}/temperature` | CardTemperature | Not built | P3 — deferred until card temperature module exists |
+| `POST /generate-ai-analysis` | Standalone AI analysis endpoint | Embedded inside /predict only | P2 — needed so frontend can trigger re-analysis without re-predicting |
+| `/health` response shape | `{status, model_loaded, db_connected, version}` | `{status, db, model}` — field names differ, missing `version` | P3 — cosmetic; fix before deploy |
+| `predictions_log` missing odds | Log odds at time of pick | INSERT does not include odds | P2 — fix when odds pipeline is live |
+
+PRD §9 architecture gaps:
+
+| Gap | PRD Spec | Current State | Priority |
+|---|---|---|---|
+| Claude async | Non-blocking; renders when ready | `generate_fight_analysis()` is sync — blocks /predict response up to ~3s | **P1 — fix before Phase 5** |
+| Structured logging | structlog JSON logs on every request | print() everywhere in main.py | P3 — fix before deploy |
+| Orchestrator parallelism | Intelligence modules run in parallel | Modules run sequentially in orchestrator | P3 — acceptable for v1 latency |
 
 ---
 
@@ -128,15 +157,15 @@ Phase 2 — Intelligence Engine (scaffolding complete; 9 scoring formulas need O
 | GoldenFeatureCalculator (DB-backed) | Yes | 7/7 ✅ |
 | migrate_csv.py | Yes | 4/4 ✅ |
 | predictions_log insert | Yes | 1/1 ✅ |
-| Phase 3 API Layer (endpoints + intelligence wiring) | Yes | 12/12 ✅ |
-| **Total** | | **237/237 ✅** |
+| Phase 3 API Layer (endpoints + intelligence wiring) | Yes | 23/23 ✅ |
+| **Total** | | **248/248 ✅** |
 
 ---
 
 ## Notes for Next Session
-- Phase 1 code is complete. Next step is running the migration against a real Supabase DB.
-- Create Supabase project → Settings → Database → Connection string → add to `backend/.env` as DATABASE_URL
-- Run migration: `cd backend && python scripts/migrate_csv.py --csv ../data/golden_full_converted.csv`
-- Run tests first to confirm no regressions: `cd backend && python -m pytest tests/ -v`
-- The 380MB CSV (`data/golden_full_converted.csv`) is in .gitignore — never commit it
-- After migration runs and smoke tests pass, mark Phase 1 ✅ in STATUS.md
+- **Phase 1 is complete.** Supabase live: 8,231 fights, 2,615 fighters. DATABASE_URL in backend/.env.
+- **Phase 3 audit complete** — 7 PRD §13 endpoint gaps and 3 §9 architecture gaps logged in table above.
+- Most urgent carry-forward: Claude analysis is blocking (P1 fix). See audit table above.
+- Phase 4 start: wire api.js into all components, display intelligence badges in Simple Mode.
+- Before Phase 5: fix Claude async gap (asyncio.to_thread or background task in /predict).
+- 3 intelligence stubs still need Opus: upset_alert, sharp_money, cinematic_title (NotImplementedError).
