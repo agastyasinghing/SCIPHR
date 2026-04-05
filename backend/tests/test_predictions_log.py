@@ -16,6 +16,7 @@ from sqlalchemy import text
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from db.models import Base
+from intelligence.models import IntelligenceResult, ValueBetResult
 
 
 @pytest.fixture
@@ -59,10 +60,14 @@ def client_with_db(engine):
         mock_predict_result["fighter1_stats"]
     )
 
+    mock_orchestrator = MagicMock()
+    mock_orchestrator.compute.return_value = IntelligenceResult(value_bet=ValueBetResult())
+
     import main as app_module
     app_module.engine = engine   # inject real SQLite engine before TestClient
 
     with patch("main.predictor", mock_predictor), \
+         patch("main.orchestrator", mock_orchestrator), \
          patch("main.ai_analyst") as mock_ai:
         mock_ai.generate_fight_analysis.return_value = {"summary": "Test analysis"}
         from main import app

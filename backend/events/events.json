@@ -1,0 +1,56 @@
+{
+  "events": [
+    {
+      "event_id": 1,
+      "event_name": "UFC 309",
+      "date": "2024-11-16",
+      "location": "Madison Square Garden, New York",
+      "fights": [
+        {
+          "fight_id": 1,
+          "fighter1_name": "Jon Jones",
+          "fighter2_name": "Stipe Miocic",
+          "is_title_fight": true,
+          "short_notice": false,
+          "weight_miss": false,
+          "narratives": ["LEGACY_FIGHT", "RETIREMENT_FIGHT"],
+          "weight_class": "Heavyweight",
+          "card_position": "main_event"
+        },
+        {
+          "fight_id": 2,
+          "fighter1_name": "Charles Oliveira",
+          "fighter2_name": "Michael Chandler",
+          "is_title_fight": false,
+          "short_notice": false,
+          "weight_miss": false,
+          "narratives": ["REDEMPTION_ARC", "UPSET_ALERT"],
+          "weight_class": "Lightweight",
+          "card_position": "co_main"
+        },
+        {
+          "fight_id": 3,
+          "fighter1_name": "Bo Nickal",
+          "fighter2_name": "Paul Craig",
+          "is_title_fight": false,
+          "short_notice": false,
+          "weight_miss": false,
+          "narratives": ["HYPE_TRAIN"],
+          "weight_class": "Middleweight",
+          "card_position": "main_card"
+        },
+        {
+          "fight_id": 4,
+          "fighter1_name": "Mauricio Rua",
+          "fighter2_name": "Brendan Allen",
+          "is_title_fight": false,
+          "short_notice": true,
+          "weight_miss": false,
+          "narratives": ["COMEBACK_STORY", "SHORT_NOTICE_CHAOS"],
+          "weight_class": "Middleweight",
+          "card_position": "prelim"
+        }
+      ]
+    }
+  ]
+}

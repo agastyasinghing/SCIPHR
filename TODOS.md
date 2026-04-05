@@ -248,3 +248,75 @@ better lines across 10+ fights).
 
 **Status:** Badge key not registered in `models.py` BadgeKey Literal (intentional —
 prevents accidental assignment). Add it back when data source is available.
+
+---
+
+## TODO-10 — /historical-scorecard endpoint + data seeding
+
+**What:** Design and build the `/historical-scorecard` API endpoint and the
+script that seeds `predictions_log` with retroactive model predictions against
+historical fight outcomes.
+
+**Why:** The scorecard page requires data — without seeding, it launches empty.
+OQ-11 is unresolved: do we run the model retrospectively against the dataset?
+If yes, each seeded row needs a `winner_actual` field to score accuracy.
+`predictions_log` currently only stores predictions, not actuals.
+
+**Pros:**
+- Enables the Historical Scorecard page to display model accuracy at launch.
+- Provides social proof ("the model called 72% of fights correctly").
+- Drives the `narrative_outcomes` and `badge_outcomes` tracking from PRD §10.10.
+
+**Cons:**
+- Requires schema change: add `winner_actual` and `fight_date` to `predictions_log`.
+- Retroactive seeding script must run the predictor against 8,000+ historical fights —
+  slow and may surface edge cases in the feature pipeline.
+- Accuracy metric needs careful definition (model prediction == actual winner, or
+  probability calibration?).
+
+**Current state:** `predictions_log` table exists (`backend/db/models.py`). Phase 3
+wires `/predict` to insert live predictions. No historical rows. No seeding script.
+`predictions_log` schema has no `winner_actual` column.
+
+**Where to start:**
+1. Add `winner_actual` and `fight_date` columns to `predictions_log` in `db/models.py`.
+2. Write `backend/scripts/seed_scorecard.py` — iterate `fights` table, call
+   `predictor.predict_fight(r_name, b_name)`, insert row with `winner_actual=winner`.
+3. Build `GET /historical-scorecard` endpoint that reads from `predictions_log`
+   grouped by month with accuracy metrics.
+4. Design the frontend scorecard page in Phase 4 around this schema.
+
+**Depends on / blocked by:** Phase 1 migration run (need fights in DB), Phase 4
+frontend page design, Alembic setup (TODO-01) for the schema migration.
+
+---
+
+## TODO-11 — Structured logging in main.py
+
+**What:** Replace ~15 `print()` debug statements in `main.py` with
+`logging.getLogger(__name__)` calls at appropriate levels.
+
+**Why:** In production (Railway), structured logs are filterable by level.
+`print()` always emits to stdout regardless of log level. Setting
+`LOG_LEVEL=WARNING` in prod is currently meaningless — all print statements fire.
+
+**Pros:**
+- `LOG_LEVEL=WARNING` silences debug noise in production.
+- Consistent with `intelligence/` modules which already use `logging`.
+- Structured log lines are easier to parse in Railway's log viewer.
+
+**Cons:**
+- Low-urgency cosmetic cleanup. No functional change.
+- ~30 min of mechanical work across `/predict`, `/generate-ai-poster`,
+  `/detailed-stats` handlers.
+
+**Current state:** All debug output in `main.py` uses `print()`. The
+`intelligence/orchestrator.py` and all intelligence modules already use
+`logging.getLogger(__name__)` correctly. `main.py` is the outlier.
+
+**Where to start:**
+Add `log = logging.getLogger(__name__)` at the top of `main.py`.
+Replace `print(f"PREDICTION REQUEST: ...")` with `log.info(...)`,
+verbose traces with `log.debug(...)`, and error blocks with `log.error(...)`.
+
+**Depends on:** Nothing. Standalone cleanup pass.
