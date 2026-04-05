@@ -2,6 +2,28 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.8.0] - 2026-04-05
+
+### Added
+- Phase 3 API Layer: `IntelligenceOrchestrator` wired into `POST /predict` — every prediction response now includes a full `intelligence` bundle (all 11 modules; failed modules return `null` via `_safe_compute`)
+- `fight_id: Optional[int]` on `PredictionRequest` — links ad-hoc predictions to curated event context for `narrative_trap` tags, `chaos_scorer` short_notice/weight_miss signals, and `cinematic_title` generation
+- `GET /events` — returns all manually curated events from `backend/events/events.json` (loaded once at startup into memory)
+- `GET /events/{fight_id}` — returns the event context dict for a specific fight by `fight_id`; 404 if not found
+- `GET /health` — readiness check: `SELECT 1` DB ping + model loaded → 200 `{"status":"ok"}`, 503 `{"status":"degraded"}` if either fails
+- Sentry SDK initialisation (opt-in via `SENTRY_DSN` env var; no-op if unset)
+- `backend/events/events.json` — sample UFC 309 event with 4 fights and narrative tags
+- `sentry-sdk==2.19.2` added to `requirements.txt`
+- 12 new tests in `tests/test_api_phase3.py` covering all Phase 3 codepaths — 237/237 total passing
+
+### Changed
+- `POST /predict`: fighter stats now served from `predictor.predict_fight()` result directly, eliminating 2 redundant `get_latest_fighter_stats()` DB queries per request; warns if stats are absent
+- `POST /predict`: same-fighter input validation moved before `predictor`/`orchestrator` None checks (pure input validation needs no initialized state)
+- `POST /predict` and `POST /generate-ai-poster`: added `except HTTPException: raise` guard so HTTP exceptions are never swallowed by the outer `except Exception` handler
+- `determine_weight_class()` consolidated — removed duplicate inline definition in `get_fighter_profile()`; single module-level function used everywhere
+
+### Fixed
+- `tests/test_predictions_log.py`: added `orchestrator` mock to `client_with_db` fixture — previously failed with 500 after orchestrator global was added to `/predict`
+
 ## [0.1.7.0] - 2026-04-05
 
 ### Added

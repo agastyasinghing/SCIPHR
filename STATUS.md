@@ -1,5 +1,5 @@
 # SCIPHR — Status
-**Last Updated:** April 2026 | **Current Phase:** Phase 1 — Database Migration
+**Last Updated:** April 2026 | **Current Phase:** Phase 4 — Frontend Wiring
 
 ---
 
@@ -10,7 +10,7 @@
 | Phase 0 — P0 Bugs + Git Setup | ✅ Complete | All 13 bugs fixed, 7/7 tests passing |
 | Phase 1 — Database Migration | 🟡 In Progress | CSV → PostgreSQL |
 | Phase 2 — Intelligence Engine | 🟡 In Progress | Scaffolding + stubs built; Opus sessions needed for formulas |
-| Phase 3 — API Layer | 🔴 Not Started | Wire intelligence to FastAPI |
+| Phase 3 — API Layer | ✅ Complete | Intelligence wired, /health, /events, Sentry |
 | Phase 4 — Frontend Wiring | 🔴 Not Started | api.js + UI components |
 | Phase 5 — Claude + Poster | 🔴 Not Started | AI analysis + poster |
 | Phase 6 — Deploy | 🔴 Not Started | Vercel + Railway + Supabase |
@@ -42,8 +42,8 @@ Phase 2 — Intelligence Engine (scaffolding complete; 9 scoring formulas need O
 
 ## Next 3 Tasks
 1. Finish Phase 1: Create Supabase project + get DATABASE_URL → add to `backend/.env`, run migration
-2. Run Phase 2 infrastructure tests: `cd backend && python -m pytest tests/test_models.py tests/test_utils.py tests/test_orchestrator.py tests/test_narrative_trap.py tests/test_value_bet.py tests/test_badge_engine.py -v`
-3. Open Opus session for first intelligence formula (recommended order: chaos_scorer → perception_gap → win_path → false_consensus → fight_dna → nightmare_matchup → value_bet → badge_engine)
+2. Open Opus sessions for remaining intelligence formulas: upset_alert → sharp_money → cinematic_title (stubs, NotImplementedError)
+3. Start Phase 4: wire api.js into all components; intelligence signals displayed in Simple Mode (badges)
 
 ---
 
@@ -104,6 +104,11 @@ Phase 2 — Intelligence Engine (scaffolding complete; 9 scoring formulas need O
 | Apr 2026 | FalseConsensusResult expanded to 4 labels (not 2); added display_message | PRD §10.14 requires INVISIBLE_COINFLIP/FAKE_MISMATCH/PUBLIC_CERTAINTY_TRAP/MILD_OVERCONFIDENCE |
 | Apr 2026 | PerceptionGapResult: added direction_f1/f2 (OVERHYPED/UNDERRATED/ALIGNED) and magnitude | PRD §10.5 display spec requires "Perception Gap: +23pts (Overhyped)" — direction fields enable this |
 | Apr 2026 | chaos_scorer accepts event_fight dict; short_notice (+8pts) weight_miss (+5pts) applied | PRD §10.6 lists both as explicit chaos factors; orchestrator now passes event_fight through |
+| Apr 2026 | Phase 3: intelligence endpoints bundle-only (no standalone /chaos-score etc.) | All signals returned from /predict; standalone endpoints duplicate DB context-building for zero frontend benefit |
+| Apr 2026 | Phase 3: /historical-scorecard deferred to Phase 4 | OQ-11 unresolved; predictions_log empty at launch; scorecard + seeding script designed together with frontend page |
+| Apr 2026 | Phase 3: fight_id optional on PredictionRequest | Links /predict to events context (narrative_trap, chaos short_notice/weight_miss); None for ad-hoc predictions |
+| Apr 2026 | Phase 3: events.json loaded once at startup into memory | Fail-fast on missing file; zero disk I/O per request; server restart needed to pick up new events (acceptable for manual fight-week curation) |
+| Apr 2026 | Phase 3: same-fighter validation moved before predictor/orchestrator None checks | Input validation needs no initialized state; existing tests relied on this ordering |
 
 ---
 
@@ -123,6 +128,8 @@ Phase 2 — Intelligence Engine (scaffolding complete; 9 scoring formulas need O
 | GoldenFeatureCalculator (DB-backed) | Yes | 7/7 ✅ |
 | migrate_csv.py | Yes | 4/4 ✅ |
 | predictions_log insert | Yes | 1/1 ✅ |
+| Phase 3 API Layer (endpoints + intelligence wiring) | Yes | 12/12 ✅ |
+| **Total** | | **237/237 ✅** |
 
 ---
 
