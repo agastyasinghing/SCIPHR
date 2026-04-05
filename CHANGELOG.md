@@ -2,6 +2,27 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.6.0] - 2026-04-04
+
+### Added
+- `upset_alert.py`: `UpsetResult` model + stubbed `compute()` wired into orchestrator and `IntelligenceResult` — awaiting Opus formula (PRD §10.8)
+- `sharp_money.py`: `SharpMoneyResult` model + stubbed `compute()` wired into orchestrator and `IntelligenceResult` — awaiting Opus formula (PRD §10.9 line-movement detection)
+- `cinematic_title.py`: `CinematicTitle` model + stubbed `generate()` wired into orchestrator — awaiting Opus formula (PRD §10.17 template system); includes `_WEIGHT_CLASS_COLORS` map
+- `PerceptionGapResult`: `direction_f1`, `direction_f2` (OVERHYPED/ALIGNED/UNDERRATED), `magnitude` (LARGE/MODERATE/SMALL) fields for PRD §10.5 display spec
+- `FalseConsensusResult`: `display_message` field + 4-label system (INVISIBLE_COINFLIP, FAKE_MISMATCH, PUBLIC_CERTAINTY_TRAP, MILD_OVERCONFIDENCE) replacing the previous 2-label set
+- `ChaosResult`: `betting_implication` string field derived from tier
+- `chaos_scorer.compute()`: `event_fight` optional parameter; `short_notice` (+8 pts) and `weight_miss` (+5 pts) flags now applied to score
+- 7 new test cases: `weight_miss` chaos flag, `betting_implication` presence, `direction`/`magnitude` literals, `display_message` populated/empty, `direction_overhyped` end-to-end assertion
+- TODOS 06–09: Fight DNA behavioral dimensions (v1.5), narrative per-trap model (v1.5), Card Temperature (Phase 3), CARD_BREAKER badge (v2 skip)
+
+### Changed
+- `ChaosResult.label` renamed to `ChaosResult.tier`; `MODERATE` tier renamed to `MIXED` to match PRD §10.6
+- `IntelligenceResult` gains three new optional fields: `upset_alert`, `sharp_money`, `cinematic_title`
+- `sharp_money` fallback: always returns `SharpMoneyResult(signal="NEUTRAL")` (never None) — mirrors `value_bet` sentinel pattern
+- `_LARGE_THRESHOLD` local variable in `perception_gap.py` removed; reuses module-level `_STRONG_THRESHOLD`
+- `false_consensus.py` comment updated: clarifies proxy threshold semantics vs PRD §10.14 market-gap thresholds
+- All tests updated for `ChaosResult.tier` rename (test_chaos_scorer, test_models, test_badge_engine, test_false_consensus, test_orchestrator)
+
 ## [0.1.5.0] - 2026-04-04
 
 ### Added

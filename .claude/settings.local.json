@@ -30,7 +30,19 @@
       "Bash(gh pr:*)",
       "Bash(python -c \"from db.models import Base, Fighter, Fight, Event, EventFight, PredictionLog, OddsHistory, NarrativeOutcome; tables = list\\(Base.metadata.tables.keys\\(\\)\\); print\\('Tables:', tables\\); print\\('OK'\\)\")",
       "Bash(python -m pytest tests/ -v)",
-      "Bash(/c/Users/sagas/sciphr/venv/Scripts/python.exe -m pytest tests/ -v)"
+      "Bash(/c/Users/sagas/sciphr/venv/Scripts/python.exe -m pytest tests/ -v)",
+      "Bash(python -m pytest tests/test_migrate_csv.py -v)",
+      "Bash(python -m pytest tests/test_fighters_endpoint.py -v)",
+      "Bash(python -m pytest tests/test_models.py tests/test_utils.py tests/test_orchestrator.py tests/test_narrative_trap.py tests/test_value_bet.py tests/test_badge_engine.py -v)",
+      "Bash(python -m pytest tests/ -v --tb=no -q)",
+      "Bash(python -m pytest tests/test_models.py tests/test_utils.py tests/test_orchestrator.py tests/test_narrative_trap.py tests/test_value_bet.py tests/test_badge_engine.py tests/test_chaos_scorer.py tests/test_false_consensus.py tests/test_fight_dna.py tests/test_nightmare_matchup.py tests/test_perception_gap.py tests/test_win_path.py -v)",
+      "Bash(python -m pytest tests/test_chaos_scorer.py tests/test_perception_gap.py tests/test_narrative_trap.py tests/test_value_bet.py tests/test_fight_dna.py tests/test_false_consensus.py tests/test_nightmare_matchup.py tests/test_win_path.py tests/test_badge_engine.py -v)",
+      "Bash(python -m pytest tests/test_chaos_scorer.py -v)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(git commit -m 'feat: wire badge_engine with 11 SCIPHR badge rules + fighter-name propagation:*)",
+      "Bash(git commit -m 'test: activate all Phase 2 formula tests \\(174/174 passing\\):*)",
+      "Bash(python -m pytest tests/ -x -q)"
     ]
   }
 }
