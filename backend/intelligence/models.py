@@ -56,18 +56,20 @@ class ChaosResult(BaseModel):
     """
     Output of chaos_scorer.compute().
 
-    score:      0 (perfectly predictable) → 100 (coin flip with explosions)
-    label:      bucketed score label
-    drivers:    human-readable list of signals that raised the score
-                (e.g. "high_finish_rate", "style_clash", "chin_issues")
-    confidence: 0–1, how reliable the chaos estimate is given data volume
+    score:              0 (perfectly predictable) → 100 (coin flip with explosions)
+    tier:               bucketed score label (LOW/MIXED/HIGH/EXTREME — PRD §10.6)
+    drivers:            human-readable list of signals that raised the score
+                        (e.g. "high_finish_rate", "style_clash", "chin_issues")
+    confidence:         0–1, how reliable the chaos estimate is given data volume
+    betting_implication: one-sentence betting guidance derived from tier (PRD §10.6)
     """
 
     available: bool = True
     score: float = Field(0.0, ge=0.0, le=100.0)
-    label: Literal["LOW", "MODERATE", "HIGH", "EXTREME"] = "LOW"
+    tier: Literal["LOW", "MIXED", "HIGH", "EXTREME"] = "LOW"
     drivers: list[str] = Field(default_factory=list)
     confidence: float = Field(0.0, ge=0.0, le=1.0)
+    betting_implication: str = ""
 
 
 class PerceptionGapResult(BaseModel):
@@ -86,6 +88,15 @@ class PerceptionGapResult(BaseModel):
     aura_score_f1 / aura_score_f2:
         Heuristic "public perceived strength" score (0–1).
         Derived from: career volume, finish rate, recency, weight class.
+
+    direction_f1 / direction_f2:
+        OVERHYPED  — public rates this fighter higher than the model does
+        UNDERRATED — model rates this fighter higher than public does
+        ALIGNED    — gap within noise threshold
+
+    magnitude:
+        Overall gap size label based on the largest abs gap of the two fighters.
+        LARGE (> 0.20), MODERATE (> 0.10), SMALL (≤ 0.10)
     """
 
     available: bool = True
@@ -96,6 +107,9 @@ class PerceptionGapResult(BaseModel):
     undervalued_fighter: Optional[str] = None
     aura_score_f1: float = Field(0.0, ge=0.0, le=1.0)
     aura_score_f2: float = Field(0.0, ge=0.0, le=1.0)
+    direction_f1: Literal["OVERHYPED", "ALIGNED", "UNDERRATED"] = "ALIGNED"
+    direction_f2: Literal["OVERHYPED", "ALIGNED", "UNDERRATED"] = "ALIGNED"
+    magnitude: Literal["LARGE", "MODERATE", "SMALL"] = "SMALL"
 
 
 class NarrativeTrapResult(BaseModel):
@@ -197,13 +211,31 @@ class FalseConsensusResult(BaseModel):
     actual_gap:
         abs(prob_f1 - prob_f2) from the model.  Low value + high aura
         disparity = INVISIBLE_COINFLIP.
+
+    label:
+        NONE                — fight is not a disguised coinflip
+        INVISIBLE_COINFLIP  — market says obvious, model says coinflip (≥ 0.25 gap)
+        FAKE_MISMATCH       — labelled a blowout, model disagrees significantly (≥ 0.15)
+        PUBLIC_CERTAINTY_TRAP — crowd more sure than data warrants (≥ 0.08)
+        MILD_OVERCONFIDENCE — mild market overconfidence (< 0.08)
+
+    display_message:
+        One-sentence brand-voice message for the "FALSE CONSENSUS" banner.
+        Empty string when label is NONE.
     """
 
     available: bool = True
     is_coinflip: bool = False
     consensus_fighter: Optional[str] = None
     actual_gap: float = Field(0.0, ge=0.0, le=1.0)
-    label: Literal["NONE", "INVISIBLE_COINFLIP"] = "NONE"
+    label: Literal[
+        "NONE",
+        "INVISIBLE_COINFLIP",
+        "FAKE_MISMATCH",
+        "PUBLIC_CERTAINTY_TRAP",
+        "MILD_OVERCONFIDENCE",
+    ] = "NONE"
+    display_message: str = ""
 
 
 class NightmareResult(BaseModel):
@@ -264,6 +296,96 @@ class WinPathResult(BaseModel):
     most_likely_method: Literal["KO", "TKO", "SUB", "DEC", "SPLIT_DEC", "UNKNOWN"] = "UNKNOWN"
     f1_primary_threat: str = "STRIKING"
     f2_primary_threat: str = "STRIKING"
+
+
+# ---------------------------------------------------------------------------
+# New P1 result models
+# ---------------------------------------------------------------------------
+
+class UpsetResult(BaseModel):
+    """
+    Output of upset_alert.compute().  Display name: Dog Teeth.
+
+    is_alert:
+        True when the model gives the betting underdog a meaningful probability
+        of winning — enough to warrant flagging.
+
+    underdog_name:
+        The fighter the model believes is undervalued by the market.
+        None when no odds are available and alert is model-confidence-only.
+
+    model_probability:
+        Model's win probability for the underdog fighter.
+
+    implied_probability:
+        Market's implied probability for the underdog (from odds_history).
+        None when odds are unavailable.
+
+    edge:
+        model_probability - implied_probability.
+        None when odds are unavailable.
+
+    american_odds:
+        Underdog's current moneyline (positive = underdog).
+        None when odds are unavailable.
+
+    payout_multiplier:
+        Return per $1 bet if underdog wins (american_odds / 100 + 1).
+
+    reason:
+        Short classification of why the alert fired.
+        e.g. "MODEL_CONFIDENCE_NEAR_EVEN" | "UNDERDOG_EDGE"
+    """
+
+    is_alert: bool = False
+    underdog_name: Optional[str] = None
+    model_probability: Optional[float] = Field(None, ge=0.0, le=1.0)
+    implied_probability: Optional[float] = Field(None, ge=0.0, le=1.0)
+    edge: Optional[float] = Field(None, ge=-1.0, le=1.0)
+    american_odds: Optional[int] = None
+    payout_multiplier: Optional[float] = None
+    reason: Optional[str] = None
+
+
+class SharpMoneyResult(BaseModel):
+    """
+    Output of sharp_money.compute().  Display name: Sharp Echo.
+
+    aligned:
+        True when line has moved TOWARD the model's prediction from opening.
+        Suggests sophisticated bettors agree with the model.
+
+    movement_magnitude:
+        Absolute implied probability shift from opening to current line.
+        0.0 when no movement or no opening line available.
+
+    signal:
+        MARKET_ALIGNMENT — line moved toward model with meaningful magnitude
+        NEUTRAL          — no meaningful movement or insufficient data
+    """
+
+    aligned: bool = False
+    movement_magnitude: float = Field(0.0, ge=0.0, le=1.0)
+    signal: Literal["MARKET_ALIGNMENT", "NEUTRAL"] = "NEUTRAL"
+
+
+class CinematicTitle(BaseModel):
+    """
+    Output of cinematic_title.generate().
+
+    title:
+        The fight's cinematic title card (e.g. "Crown or Collapse").
+
+    subtitle:
+        One-line context subtitle (weight class, key signals).
+
+    weight_class_color:
+        CSS color token for the title display — matches weight class convention.
+    """
+
+    title: str = "The Matchup"
+    subtitle: str = ""
+    weight_class_color: str = "default"
 
 
 # ---------------------------------------------------------------------------
@@ -343,4 +465,7 @@ class IntelligenceResult(BaseModel):
     false_consensus: Optional[FalseConsensusResult] = None
     nightmare: Optional[NightmareResult] = None
     win_path: Optional[WinPathResult] = None
+    upset_alert: Optional[UpsetResult] = None
+    sharp_money: Optional[SharpMoneyResult] = None
+    cinematic_title: Optional[CinematicTitle] = None
     badges: list[Badge] = Field(default_factory=list)
