@@ -2,6 +2,15 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.7.0] - 2026-04-05
+
+### Added
+- `upset_alert.compute()` implemented (PRD §10.8): with-odds `UNDERDOG_EDGE` branch (dog model ≥ 0.45 AND reconstructed american ≥ +150 AND edge ≥ 0.08) + no-odds `MODEL_CONFIDENCE_NEAR_EVEN` fallback (0.45 ≤ dog_prob < 0.55)
+- `sharp_money.compute()` implemented (PRD §10.9): queries `odds_history` for opening + latest snapshot, fires `MARKET_ALIGNMENT` when f1's implied line moves toward model with magnitude > 0.03, falls back to earliest row when `is_opening_line` flag is absent
+- `cinematic_title.generate()` implemented (PRD §10.17): 18-template priority walk across chaos tier, DNA clash, nightmare, badges, false_consensus, upset edge, narratives, win paths, aura, veteran gap, and title-fight context; subtitle + weight-class color
+- `_implied_to_american()` / `_payout_multiplier()` helpers in `upset_alert.py` (implied 0.40 → +150 exact)
+- 44 new tests (12 `upset_alert`, 11 `sharp_money`, 21 `cinematic_title`) — 225/225 total passing
+
 ## [0.1.6.0] - 2026-04-04
 
 ### Added
