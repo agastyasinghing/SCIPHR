@@ -2,6 +2,12 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.9.1] - 2026-04-05
+
+### Changed
+- STATUS.md updated: Phase 2 Intelligence Engine marked complete (was "In Progress"); upset_alert, sharp_money, cinematic_title confirmed implemented with 44/44 tests passing
+- Next 3 Tasks updated to reflect Phase 4 as next priority (intelligence stubs no longer blocking)
+
 ## [0.1.9.0] - 2026-04-05
 
 ### Added
