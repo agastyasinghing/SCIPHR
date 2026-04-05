@@ -45,7 +45,7 @@ def test_only_value_bet_no_odds_and_rest_none_returns_empty():
 # ---------------------------------------------------------------------------
 
 def test_chaos_certified_badge_fires_above_threshold():
-    chaos = ChaosResult(score=75.0, label="EXTREME", drivers=["high_finish_rate"])
+    chaos = ChaosResult(score=75.0, tier="EXTREME", drivers=["high_finish_rate"])
     result = compute(chaos=chaos)
 
     chaos_badge = next((b for b in result if b.key == "CHAOS_CERTIFIED"), None)
@@ -57,7 +57,7 @@ def test_chaos_certified_badge_fires_above_threshold():
 
 
 def test_chaos_certified_does_not_fire_below_threshold():
-    chaos = ChaosResult(score=25.0, label="LOW", drivers=[])
+    chaos = ChaosResult(score=25.0, tier="LOW", drivers=[])
     result = compute(chaos=chaos)
     assert not any(b.key == "CHAOS_CERTIFIED" for b in result)
 
@@ -80,7 +80,7 @@ def test_narrative_hostage_does_not_fire_for_low_risk():
 
 def test_all_badges_have_valid_keys():
     from intelligence.models import BADGE_META
-    chaos = ChaosResult(score=80.0, label="EXTREME", drivers=["high_finish_rate"])
+    chaos = ChaosResult(score=80.0, tier="EXTREME", drivers=["high_finish_rate"])
     narrative = NarrativeTrapResult(
         risk="HIGH", active_traps=["HYPE_TRAIN"], trapped_fighter="F1"
     )
@@ -91,7 +91,7 @@ def test_all_badges_have_valid_keys():
 
 def test_badge_label_and_color_match_badge_meta():
     from intelligence.models import BADGE_META
-    chaos = ChaosResult(score=80.0, label="EXTREME", drivers=["x"])
+    chaos = ChaosResult(score=80.0, tier="EXTREME", drivers=["x"])
     result = compute(chaos=chaos)
     for badge in result:
         expected = BADGE_META[badge.key]

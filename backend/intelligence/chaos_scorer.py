@@ -21,6 +21,8 @@ Label thresholds:
 
 from __future__ import annotations
 
+from typing import Optional
+
 from .models import ChaosResult, FighterContext
 from . import utils
 
@@ -75,9 +77,28 @@ def _record_volatility(fights: list[dict], fighter_name: str) -> float:
     return changes / (len(results) - 1)
 
 
-def compute(f1_ctx: FighterContext, f2_ctx: FighterContext) -> ChaosResult:
-    """Compute the Chaos Score for a matchup."""
+def compute(
+    f1_ctx: FighterContext,
+    f2_ctx: FighterContext,
+    event_fight: Optional[dict] = None,
+) -> ChaosResult:
+    """Compute the Chaos Score for a matchup.
+
+    Args:
+        f1_ctx:     FighterContext for fighter 1.
+        f2_ctx:     FighterContext for fighter 2.
+        event_fight: event_fights row dict (from orchestrator).
+                     When provided, short_notice and weight_miss flags are
+                     applied as additional chaos modifiers (PRD §10.6).
+    """
     drivers: list[str] = []
+
+    # ── Fight-context modifiers from event_fight (PRD §10.6) ─────────
+    short_notice: bool = False
+    weight_miss: bool = False
+    if event_fight:
+        short_notice = bool(event_fight.get("short_notice", False))
+        weight_miss = bool(event_fight.get("weight_miss", False))
 
     # ── Signal 1: bilateral finish rate (0-55) ───────────────────────
     fr1 = utils.finish_rate(f1_ctx.fights, f1_ctx.name)
@@ -135,8 +156,17 @@ def compute(f1_ctx: FighterContext, f2_ctx: FighterContext) -> ChaosResult:
         streak_chaos += 1.0
     streak_score = min(5.0, streak_chaos)
 
+    # ── Signal 7: short notice / weight miss (from event context) ────
+    context_score = 0.0
+    if short_notice:
+        context_score += 8.0   # PRD §10.6 weight: 1.5 on 0-10 scale → ~15% of 0-100
+        drivers.append("short_notice")
+    if weight_miss:
+        context_score += 5.0   # PRD §10.6 weight: 1.0 on 0-10 scale → ~10% of 0-100
+        drivers.append("weight_miss")
+
     # ── Combine ──────────────────────────────────────────────────────
-    raw = finish_score + clash_score + offense_score + chin_score + vol_score + streak_score
+    raw = finish_score + clash_score + offense_score + chin_score + vol_score + streak_score + context_score
 
     # Weight-class multiplier (symmetric — average both fighters)
     wc1 = f1_ctx.stats.get("weight_class", "Unknown")
@@ -148,15 +178,27 @@ def compute(f1_ctx: FighterContext, f2_ctx: FighterContext) -> ChaosResult:
 
     score = max(0.0, min(100.0, raw * wc_mult))
 
-    # ── Label ────────────────────────────────────────────────────────
+    # ── Tier ─────────────────────────────────────────────────────────
     if score < 30:
-        label = "LOW"
+        tier = "LOW"
     elif score < 55:
-        label = "MODERATE"
+        tier = "MIXED"
     elif score < 75:
-        label = "HIGH"
+        tier = "HIGH"
     else:
-        label = "EXTREME"
+        tier = "EXTREME"
+
+    # ── Betting implication (PRD §10.6) ──────────────────────────────
+    if tier in ("HIGH", "EXTREME"):
+        betting_implication = (
+            "High variance — consider props over fight-going-to-distance"
+        )
+    elif tier == "MIXED":
+        betting_implication = (
+            "Moderate variance — standard prediction confidence applies"
+        )
+    else:
+        betting_implication = "Low variance — high-confidence technical matchup"
 
     # ── Confidence (based on minimum data availability) ──────────────
     min_fights = min(len(f1_ctx.fights), len(f2_ctx.fights))
@@ -168,7 +210,8 @@ def compute(f1_ctx: FighterContext, f2_ctx: FighterContext) -> ChaosResult:
     return ChaosResult(
         available=True,
         score=round(score, 2),
-        label=label,
+        tier=tier,
         drivers=drivers,
         confidence=round(confidence, 2),
+        betting_implication=betting_implication,
     )

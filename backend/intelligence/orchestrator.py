@@ -12,6 +12,7 @@ Data flow per /predict call:
        │    (raises ValueError if latest_features=NULL)
        │
        ├─4─ _safe_compute(chaos_scorer)      → ChaosResult | None
+       │    (receives event_fight for short_notice/weight_miss)
        ├─5─ _safe_compute(perception_gap)    → PerceptionGapResult | None
        ├─6─ _safe_compute(narrative_trap)    → NarrativeTrapResult | None
        ├─7─ _safe_compute(value_bet)         → ValueBetResult (NO_ODDS if no fight_id)
@@ -19,7 +20,10 @@ Data flow per /predict call:
        ├─9─ _safe_compute(false_consensus)   → FalseConsensusResult | None
        ├─10─ _safe_compute(nightmare_matchup)→ NightmareResult | None
        ├─11─ _safe_compute(win_path)         → WinPathResult | None
-       ├─12─ badge_engine.compute(all above) → list[Badge]
+       ├─12─ _safe_compute(upset_alert)      → UpsetResult | None
+       ├─13─ _safe_compute(sharp_money)      → SharpMoneyResult | None
+       ├─14─ _safe_compute(cinematic_title)  → CinematicTitle | None
+       ├─15─ badge_engine.compute(all above) → list[Badge]
        │
        └─► IntelligenceResult bundle
 
@@ -49,15 +53,19 @@ from .models import (
     FighterContext,
     IntelligenceResult,
     ValueBetResult,
+    SharpMoneyResult,
 )
 from . import (
     badge_engine,
     chaos_scorer,
+    cinematic_title,
     false_consensus,
     fight_dna,
     narrative_trap,
     nightmare_matchup,
     perception_gap,
+    sharp_money,
+    upset_alert,
     value_bet,
     win_path,
 )
@@ -129,8 +137,9 @@ class IntelligenceOrchestrator:
             return IntelligenceResult()
 
         # ── Run modules via _safe_compute ─────────────────────────────────
+        # chaos_scorer receives event_fight so short_notice/weight_miss are applied
         chaos_res = self._safe_compute(
-            chaos_scorer.compute, f1_ctx, f2_ctx,
+            chaos_scorer.compute, f1_ctx, f2_ctx, event_fight,
             module_name="chaos_scorer",
         )
         gap_res = self._safe_compute(
@@ -168,6 +177,22 @@ class IntelligenceOrchestrator:
         if value_res is None:
             value_res = ValueBetResult()
 
+        # ── P1 modules (stubs until Opus fills formulas) ──────────────────
+        upset_res = self._safe_compute(
+            upset_alert.compute,
+            f1_ctx, f2_ctx, model_probs, value_res,
+            module_name="upset_alert",
+        )
+        sharp_res = self._safe_compute(
+            sharp_money.compute,
+            f1_ctx, f2_ctx, self.engine, fight_id,
+            model_probs[0], model_probs[1],
+            module_name="sharp_money",
+        )
+        # Fallback: SharpMoneyResult always returns NEUTRAL (never None)
+        if sharp_res is None:
+            sharp_res = SharpMoneyResult()
+
         # ── Badge assignment ───────────────────────────────────────────────
         # badge_engine is called via _safe_compute so a NotImplementedError
         # (stub not yet filled by Opus) or any runtime error never propagates
@@ -188,6 +213,28 @@ class IntelligenceOrchestrator:
             module_name="badge_engine",
         ) or []
 
+        # ── Cinematic title (reads full bundle — must run last) ───────────
+        # Build a partial IntelligenceResult so cinematic_title can read all signals
+        _partial = IntelligenceResult(
+            chaos=chaos_res,
+            perception_gap=gap_res,
+            narrative_trap=narrative_res,
+            value_bet=value_res,
+            fight_dna=dna_res,
+            false_consensus=consensus_res,
+            nightmare=nightmare_res,
+            win_path=win_res,
+            upset_alert=upset_res,
+            sharp_money=sharp_res,
+            badges=badges,
+        )
+        weight_class = f1_ctx.stats.get("weight_class", "Unknown")
+        title_res = self._safe_compute(
+            cinematic_title.generate,
+            f1_ctx, f2_ctx, _partial, weight_class, event_fight,
+            module_name="cinematic_title",
+        )
+
         return IntelligenceResult(
             chaos=chaos_res,
             perception_gap=gap_res,
@@ -197,6 +244,9 @@ class IntelligenceOrchestrator:
             false_consensus=consensus_res,
             nightmare=nightmare_res,
             win_path=win_res,
+            upset_alert=upset_res,
+            sharp_money=sharp_res,
+            cinematic_title=title_res,
             badges=badges,
         )
 

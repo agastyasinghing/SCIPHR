@@ -109,6 +109,26 @@ def compute(
     elif gap_f2 > _MODERATE_THRESHOLD:
         undervalued = f2_ctx.name
 
+    # Per-fighter direction (PRD §10.5 display: "Perception Gap: +23pts (Overhyped)")
+    # gap_f1 = model_prob - perceived_prob
+    # gap_f1 < 0 → public rates f1 higher than model → OVERHYPED
+    # gap_f1 > 0 → model rates f1 higher than public → UNDERRATED
+    def _direction(gap: float) -> str:
+        if gap < -_MODERATE_THRESHOLD:
+            return "OVERHYPED"
+        if gap > _MODERATE_THRESHOLD:
+            return "UNDERRATED"
+        return "ALIGNED"
+
+    # Overall magnitude based on largest abs gap
+    # _STRONG_THRESHOLD (0.20) doubles as the LARGE magnitude boundary
+    if abs_gap >= _STRONG_THRESHOLD:
+        magnitude = "LARGE"
+    elif abs_gap >= _MODERATE_THRESHOLD:
+        magnitude = "MODERATE"
+    else:
+        magnitude = "SMALL"
+
     return PerceptionGapResult(
         available=True,
         gap_f1=round(gap_f1, 4),
@@ -118,4 +138,7 @@ def compute(
         undervalued_fighter=undervalued,
         aura_score_f1=round(aura_f1, 4),
         aura_score_f2=round(aura_f2, 4),
+        direction_f1=_direction(gap_f1),
+        direction_f2=_direction(gap_f2),
+        magnitude=magnitude,
     )

@@ -64,3 +64,27 @@ def test_zero_fight_fighter_has_low_aura(zero_fight_ctx, f1_ctx):
     """A fighter with no fight history should have near-zero aura score."""
     result = compute(zero_fight_ctx, f1_ctx, (0.30, 0.70))
     assert result.aura_score_f1 < 0.3
+
+
+def test_direction_fields_valid_literals(f1_ctx, f2_ctx):
+    """direction_f1 and direction_f2 must be valid Literal values."""
+    result = compute(f1_ctx, f2_ctx, (0.60, 0.40))
+    assert result.direction_f1 in ("OVERHYPED", "ALIGNED", "UNDERRATED")
+    assert result.direction_f2 in ("OVERHYPED", "ALIGNED", "UNDERRATED")
+
+
+def test_magnitude_valid_literal(f1_ctx, f2_ctx):
+    """magnitude must be a valid Literal value."""
+    result = compute(f1_ctx, f2_ctx, (0.60, 0.40))
+    assert result.magnitude in ("LARGE", "MODERATE", "SMALL")
+
+
+def test_direction_overhyped_when_model_rates_lower(f1_ctx, f2_ctx):
+    """
+    When model prob is much lower than aura-implied prob, the fighter
+    should be OVERHYPED (public rates them higher than model does).
+    Use extreme model probs to guarantee the gap exceeds the threshold.
+    """
+    # f1 has high aura (many fights, finisher) but model gives them only 10%
+    result = compute(f1_ctx, f2_ctx, (0.10, 0.90))
+    assert result.direction_f1 == "OVERHYPED"

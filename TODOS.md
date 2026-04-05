@@ -139,3 +139,112 @@ entire predictor_golden.py call chain as async — not worth it for v1 throughpu
 
 **Where to fix:** `SCIPHR_PRD_v1.1.md` §11 (Migration Strategy paragraph) and
 §15 (Backend table, Database ORM row).
+
+---
+
+## TODO-06 — Fight DNA dimension names: behavioral vs statistical (v1.5)
+
+**What:** PRD §10.13 specifies 7 behavioral/tactical dimensions for Fight DNA:
+`patience_vs_chaos`, `pressure_vs_counter`, `finish_urgency`, `collapse_risk`,
+`early_vs_late_danger`, `stylistic_rigidity`, `scramble_comfort`.
+
+Built implementation uses 8 statistical output dimensions: `striking`, `grappling`,
+`wrestling`, `submission`, `pressure`, `chin`, `cardio`, `speed`.
+
+**Why this matters (brand/UX):**
+PRD dimensions are meant to be instantly legible to a casual fan ("patience vs chaos"
+is a fight concept; "striking" is just a stat). The visual DNA strand described in PRD
+§10.13 depends on behavioral labels to be screenshot-worthy. "0.7 scramble_comfort"
+conveys something; "0.7 grappling" does not.
+
+**Why deferred:**
+The 8 statistical dimensions are accurate and derivable today. The behavioral mapping
+(e.g. deriving "stylistic_rigidity" from the dataset) requires either manual calibration
+against historical fights or a short Opus session to define the heuristics.
+v1 ships with statistical dims; frontend component can be designed around either.
+
+**Where to start:** `backend/intelligence/fight_dna.py` — replace/rename the 8 dimensions
+using behavioral heuristics derived from the same underlying stats (e.g.
+`patience_vs_chaos = 1 - (slpm_norm * 0.6 + ko_rate * 0.4)` as a rough proxy).
+Also update `FightDNAResult.f1_dna/f2_dna` dict keys and the frontend component.
+
+**Depends on:** Phase 4 frontend Fight DNA component (design the visual first,
+then calibrate dimension names to match what the component renders).
+
+---
+
+## TODO-07 — Narrative per-trap detail model (v1.5)
+
+**What:** PRD §10.7 specifies a `NarrativeTrap` Pydantic model per detected narrative
+with fields: `narrative`, `description`, `is_trap`, `base_rate`, `trap_message`.
+Built `NarrativeTrapResult.active_traps` is just a `list[str]` of tag names —
+no per-trap detail, no base rate, no is_trap flag per tag.
+
+**Why this matters:**
+The Historical Scorecard (§10.10) is supposed to show "Flagged narratives: Hyped fighter
+won 44% — below base rate ✓" and "Narrative Trap calls accurate: 61% of the time."
+This requires per-trap `base_rate` to compute. Without it, narrative performance
+tracking on the scorecard is impossible.
+
+**Why deferred:**
+v1 narrative tags are manually curated (no NLP). Per-trap base rates require
+historical validation against the fights dataset (an Opus session to derive).
+
+**Where to start:** Add `NarrativeTrap` Pydantic model to `intelligence/models.py`,
+update `NarrativeTrapResult.active_traps: list[str]` → `traps: list[NarrativeTrap]`,
+populate `base_rate` from a lookup table calibrated against the fights table.
+Also update `narrative_outcomes` table inserts to store per-trap data.
+
+**Depends on:** Phase 1 migration (need fights in DB to compute base rates),
+Opus session for historical base rate calibration.
+
+---
+
+## TODO-08 — Card Temperature calculation (Phase 3 dashboard)
+
+**What:** PRD §10.6 specifies a `card_temperature()` function that derives
+`CardTemperature` (CHALK/MIXED/CHAOS/DOG) from per-fight chaos scores across
+a full event card. The `events.card_temperature` column exists in the DB schema
+but nothing populates it.
+
+**Why this matters:** The Dashboard (§10.3) displays Card Temperature as the event's
+headline signal. It's also used to drive the Card Temperature badge and fight week
+content framing.
+
+**Where to build:** Add `card_temperature()` to `intelligence/chaos_scorer.py`
+(it directly consumes chaos scores) and call it from a Phase 3 endpoint or a
+fight-week admin script that populates `events.card_temperature` after all fights
+are scored.
+
+**Implementation note:** PRD §10.6 derivation:
+```python
+avg_chaos = mean(chaos_score for each fight on card)
+high_chaos_count = count(fights with chaos_score >= 55)  # HIGH tier (0-100 scale)
+if avg_chaos >= 70: label = "CHAOS CARD"
+elif avg_chaos >= 50: label = "MIXED CARD"
+elif high_chaos_count >= 3: label = "DOG CARD"
+else: label = "CHALK CARD"
+```
+
+**Depends on:** Phase 3 API Layer (events endpoints), all fight chaos scores computed.
+
+---
+
+## TODO-09 — CARD_BREAKER badge (v2 skip)
+
+**What:** PRD §10.16 defines the `CARD_BREAKER` badge: "Fighter's presence reliably
+shifts the entire card's dynamics." Trigger: `name_recognition_tier == ELITE and
+fan_base_size == LARGE`.
+
+**Why skipped:** Both `name_recognition_tier` and `fan_base_size` are fields that
+require external data (social following, pay-per-view numbers, media coverage) not
+present in the dataset. No proxy derivable from existing stats is reliable enough
+to be on-brand.
+
+**v2 path:** Wire to a manually curated `elite_fighters` lookup table or add a
+`is_elite` boolean to the `fighters` table that the operator maintains. Could also
+be derived from betting line history (fighters who consistently command -200 or
+better lines across 10+ fights).
+
+**Status:** Badge key not registered in `models.py` BadgeKey Literal (intentional —
+prevents accidental assignment). Add it back when data source is available.

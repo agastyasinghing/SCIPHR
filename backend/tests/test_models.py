@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from intelligence.models import (
     Badge,
     ChaosResult,
+    CinematicTitle,
     FalseConsensusResult,
     FightDNAResult,
     FighterContext,
@@ -21,6 +22,8 @@ from intelligence.models import (
     NarrativeTrapResult,
     NightmareResult,
     PerceptionGapResult,
+    SharpMoneyResult,
+    UpsetResult,
     ValueBetResult,
     WinPathResult,
 )
@@ -78,6 +81,9 @@ class TestIntelligenceResult:
         assert result.false_consensus is None
         assert result.nightmare is None
         assert result.win_path is None
+        assert result.upset_alert is None
+        assert result.sharp_money is None
+        assert result.cinematic_title is None
 
     def test_value_bet_defaults_to_no_odds(self):
         result = IntelligenceResult()
@@ -90,7 +96,7 @@ class TestIntelligenceResult:
 
     def test_accepts_full_intelligence_result(self):
         result = IntelligenceResult(
-            chaos=ChaosResult(score=72.0, label="HIGH"),
+            chaos=ChaosResult(score=72.0, tier="HIGH"),
             value_bet=ValueBetResult(signal="NO_ODDS"),
             badges=[],
         )
@@ -139,15 +145,15 @@ class TestBadge:
 class TestFieldValidators:
     def test_chaos_score_above_100_rejected(self):
         with pytest.raises(ValidationError):
-            ChaosResult(score=150.0, label="HIGH")
+            ChaosResult(score=150.0, tier="HIGH")
 
     def test_chaos_score_below_0_rejected(self):
         with pytest.raises(ValidationError):
-            ChaosResult(score=-5.0, label="LOW")
+            ChaosResult(score=-5.0, tier="LOW")
 
     def test_chaos_confidence_above_1_rejected(self):
         with pytest.raises(ValidationError):
-            ChaosResult(score=50.0, label="MODERATE", confidence=1.5)
+            ChaosResult(score=50.0, tier="MIXED", confidence=1.5)
 
     def test_value_bet_edge_pct_out_of_range(self):
         with pytest.raises(ValidationError):
@@ -171,7 +177,7 @@ class TestFieldValidators:
 
     def test_valid_boundary_values_accepted(self):
         # Test exact boundary values are accepted (ge/le not gt/lt)
-        r = ChaosResult(score=0.0, label="LOW", confidence=0.0)
+        r = ChaosResult(score=0.0, tier="LOW", confidence=0.0)
         assert r.score == 0.0
-        r = ChaosResult(score=100.0, label="EXTREME", confidence=1.0)
+        r = ChaosResult(score=100.0, tier="EXTREME", confidence=1.0)
         assert r.score == 100.0
