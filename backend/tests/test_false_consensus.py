@@ -22,10 +22,12 @@ def test_near_50_50_with_high_chaos_is_coinflip(f1_ctx, f2_ctx):
     chaos.score=80 — EXTREME chaos.
     -> is_coinflip should be True.
     """
-    chaos = ChaosResult(score=80.0, label="EXTREME", drivers=["x"])
+    chaos = ChaosResult(score=80.0, tier="EXTREME", drivers=["x"])
     result = compute(f1_ctx, f2_ctx, chaos=chaos, model_probs=(0.52, 0.48))
     assert result.is_coinflip is True
     assert result.label == "INVISIBLE_COINFLIP"
+    assert isinstance(result.display_message, str)
+    assert len(result.display_message) > 0
 
 
 def test_decisive_model_is_not_coinflip(f1_ctx, f2_ctx):
@@ -33,7 +35,7 @@ def test_decisive_model_is_not_coinflip(f1_ctx, f2_ctx):
     model_probs=(0.75, 0.25) — decisive favourite.
     Even with chaos present, should NOT be an invisible coinflip.
     """
-    chaos = ChaosResult(score=60.0, label="HIGH", drivers=["x"])
+    chaos = ChaosResult(score=60.0, tier="HIGH", drivers=["x"])
     result = compute(f1_ctx, f2_ctx, chaos=chaos, model_probs=(0.75, 0.25))
     assert result.is_coinflip is False
     assert result.label == "NONE"
@@ -56,3 +58,10 @@ def test_works_without_chaos_input(f1_ctx, f2_ctx):
     result = compute(f1_ctx, f2_ctx, chaos=None, model_probs=(0.53, 0.47))
     assert isinstance(result, FalseConsensusResult)
     assert result.available is True
+
+
+def test_display_message_empty_when_no_coinflip(f1_ctx, f2_ctx):
+    """display_message must be empty string when label is NONE."""
+    result = compute(f1_ctx, f2_ctx, chaos=None, model_probs=(0.75, 0.25))
+    assert result.label == "NONE"
+    assert result.display_message == ""

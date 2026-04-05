@@ -71,7 +71,7 @@ class TestSafeCompute:
         orch = IntelligenceOrchestrator(engine)
 
         def good_fn(a, b):
-            return ChaosResult(score=55.0, label="HIGH")
+            return ChaosResult(score=55.0, tier="HIGH")
 
         result = orch._safe_compute(good_fn, "x", "y", module_name="test")
         assert result is not None
