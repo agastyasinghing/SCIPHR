@@ -11,20 +11,20 @@
 | Phase 1 — Database Migration | ✅ Complete | 8,231 fights + 2,615 fighters migrated to Supabase |
 | Phase 2 — Intelligence Engine | ✅ Complete | All 9 modules implemented; upset_alert, sharp_money, cinematic_title done (44/44 tests) |
 | Phase 3 — API Layer | ✅ Complete | Intelligence wired, /health, /events, Sentry |
-| Phase 4 — Frontend Wiring | 🔴 Not Started | api.js + UI components |
+| Phase 4 — Frontend Wiring | ✅ Complete | api.js wired, badges, intel tab, dashboard events, scorecard shell |
 | Phase 5 — Claude + Poster | 🔴 Not Started | AI analysis + poster |
 | Phase 6 — Deploy | 🔴 Not Started | Vercel + Railway + Supabase |
 
 ---
 
 ## Current State
-**What exists:** FastAPI backend + React v2 frontend (moved to frontend/). XGBoost model working at 85.7% accuracy. Core prediction endpoint functional. Fighter search working. All P0 bugs fixed. PostgreSQL on Supabase live with 8,231 fights + 2,615 fighters. All 9 intelligence modules implemented and tested. Full intelligence bundle returned from /predict.
+**What exists:** FastAPI backend + React v2 frontend. XGBoost model at 85.7% accuracy. All P0 bugs fixed. Supabase live (8,231 fights, 2,615 fighters). All 9 intelligence modules implemented (44/44 tests). Phase 4 complete: api.js wired, intelligence badges in FightPoster, Intelligence tab in AnalystMode (all 11 signals), Dashboard fetches real events, HistoricalScorecard page shell, GET /historical-scorecard endpoint, vitest test scaffold (5 test files).
 
-**What is broken:** Nothing critical. See user actions required below.
+**What is broken:** Nothing critical.
 
-**What is fake:** Dashboard data 100% hardcoded. `generate_recent_record()` in main.py uses random.seed() to fabricate W/L history — this is a known placeholder. Model performance metrics hardcoded.
+**What is fake:** `generate_recent_record()` in main.py uses random.seed() to fabricate W/L history — known placeholder. HistoricalScorecard shows empty state (predictions_log empty at launch, no seeding yet — TODO-10).
 
-**What is missing:** Frontend wired to intelligence signals, real events data for upcoming cards.
+**What is missing:** Claude analysis wiring (Phase 5). AI poster Phase 5. Scorecard seeding (TODO-10).
 
 ---
 
@@ -35,14 +35,14 @@
 ---
 
 ## In Progress
-Phase 4 — Frontend Wiring (next up). Phase 2 intelligence engine complete.
+Phase 5 — Claude + Poster (next up).
 
 ---
 
 ## Next 3 Tasks
-1. Start Phase 4: wire api.js into all components; render intelligence badges in Simple Mode
-2. Build Historical Scorecard page (deferred from Phase 3; resolve OQ-11 seeding strategy)
-3. Fix Claude analysis async gap (already partially addressed by POST /generate-ai-analysis — verify frontend calls it post-predict)
+1. Start Phase 5: wire Claude analysis async call in AnalystMode (POST /generate-ai-analysis after prediction renders)
+2. Wire AI poster generation flow (already built in FightPoster — verify rate-limit error handling is correct)
+3. Run TODO-10 seeding session: add winner_actual population tool, seed predictions_log with historical fights
 
 ---
 

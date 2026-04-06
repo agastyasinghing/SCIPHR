@@ -355,3 +355,38 @@ Run the 5 DB queries first (they must precede module calls), then fan out.
 
 **Depends on:** Phase 6 load testing to confirm whether latency budget is actually
 exceeded at realistic concurrency. Don't do this speculatively.
+
+---
+
+## TODO-14 — Frontend test coverage expansion (Phase 5+)
+
+**What:** Extend the vitest + @testing-library/react test scaffold (built in Phase 4)
+to cover Phase 5 components: AI poster error states, `generate-ai-analysis` loading
+and polling behavior, and the Claude analysis render panel.
+
+**Why:** Phase 4 established the test pattern (vitest + jsdom + @testing-library).
+Phase 5 adds async Claude analysis state (loading → rendered) and the AI poster
+generation flow — both have non-obvious failure modes (rate-limit 429, timeout,
+template fallback). Without tests, these are first discovered in production.
+
+**Pros:**
+- Catches null-safety bugs in Claude analysis render (`ai_analysis` is null by default,
+  populated async via a second API call — easy to forget the null guard).
+- Rate-limit 429 on `/generate-ai-poster` needs a test: currently shows `aiPosterError`
+  inline state but the specific 429 message should differ from a generic 500.
+
+**Cons:**
+- Phase 5 async polling tests require `vi.useFakeTimers()` — slightly more setup.
+
+**Current state:** Phase 4 test scaffold in `frontend/src/__tests__/`.
+Setup in `frontend/vite.config.js` (vitest + jsdom).
+Test script: `npm run test` in `frontend/`.
+
+**Where to start:**
+```
+frontend/src/__tests__/FightPoster.test.jsx   — add 429 rate-limit error test
+frontend/src/__tests__/AnalystMode.test.jsx   — add Claude analysis render test
+frontend/src/__tests__/AIAnalysis.test.jsx    — new: polling + timeout + fallback
+```
+
+**Depends on / blocked by:** Phase 5 build (need the components to exist first).
