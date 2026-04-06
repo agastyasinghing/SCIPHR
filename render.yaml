@@ -1,0 +1,40 @@
+# SCIPHR — Render deployment config
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy: connect repo in Render dashboard, select this file.
+# Required env vars (set in Render dashboard, never commit values):
+#   DATABASE_URL          — Supabase PostgreSQL connection string
+#   SENTRY_DSN            — backend Sentry project DSN
+#   ALLOWED_ORIGINS       — comma-separated frontend URL(s), e.g. https://sciphr.vercel.app
+#   UPSTASH_REDIS_URL     — Upstash Redis URL (rediss://...) for rate limiter
+#   GEMINI_API_KEY        — Google AI Studio API key for poster generation
+#   GOOGLE_CLOUD_PROJECT_ID — GCP project ID
+#   ODDS_API_KEY          — The Odds API key for value_bet signals
+#   APP_VERSION           — set to current version string, e.g. v0.1.13.0
+
+services:
+  - type: web
+    name: sciphr-api
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONPATH
+        value: /app/backend
+      - key: DATABASE_URL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_CLOUD_PROJECT_ID
+        sync: false
+      - key: ODDS_API_KEY
+        sync: false
+      - key: APP_VERSION
+        sync: false
