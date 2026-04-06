@@ -2,6 +2,37 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.11.0] - 2026-04-05
+
+### Added
+- `api.js`: `predictSimple()` — calls `POST /predict/simple` without logging to `predictions_log`; for display previews only
+- `api.js`: `getFighterHistory()`, `getCardPredictions()`, weight class / active-only filter params on `getFighters()`
+- `GET /events/past` endpoint — returns past events sorted desc; was missing (pre-existing 404)
+- `GET /events/{id}/card-predictions` — runs `predict/simple` for all fights on a card; used by Upset Watch feed
+- `GET /fighters` now returns `[{name, weight_class, is_active}]` objects with optional `weight_class` and `active_only` query params
+- `GET /fighter/{name}` now returns `intelligence` block with on-the-fly heuristic scores (`aura_score`, `composite_score`, `chaos_contribution`, `mirage_meter`, `style`, `scores_source`)
+- `classify_style` import moved to module level in `main.py`
+- `intelligence.scores_source` field — `"computed"` when DB has batch scores, `"heuristic"` otherwise
+- TODOS 16–18: deferred gaps documented (endpoint shape standardisation, UpsetWatchFeed extraction, `card_temperature` field schema)
+- FighterSearch: weight class filter and active/inactive status filter now functional; weight class tag badge on each card
+- FighterProfile: intelligence scores panel, fight history table, style tag badge, "Predict a fight with" CTA
+- HeroFightCard: live confidence bar from `predictSimple` (no-log); Card Temperature badge from `event.card_temperature`
+- Dashboard: Upset Watch feed via `getCardPredictions`; "Editor's Picks" labeling with "not model output" subtitle; ModelPerformance subtitle links to /scorecard
+- AnalystMode: dual probability bar, confidence tier badge (LEAN/MODERATE/STRONG/LOCK), Kelly fraction, fight history for both fighters
+- FightPoster: compact intelligence signals below prediction stamp (Perception Gap, Chaos tier, Edge Detected)
+- PicksBuilder: pre-loads fighters from `?fighter1=Name&fighter2=Name` URL params
+
+### Fixed
+- `HeroFightCard` used `api.predictFight()` (POST `/predict`) on every Dashboard load, polluting `predictions_log` with auto-generated preview entries — switched to `api.predictSimple()` (POST `/predict/simple`, no logging)
+- Weight class filter was completely broken — `/fighters` previously returned strings, filter never applied; now returns objects and filter uses `weight_class` field correctly
+- `test_fighters_endpoint_returns_db_names` — test expected string list; updated to extract names from object array
+- `Dashboard.test.jsx` mock missing `predictSimple` and `getCardPredictions` — added both
+- `AnalystMode.test.jsx` — `vi.mock` factory referenced `const mockRequest` before initialization (hoisting bug); replaced with inline `vi.fn()` and `import api` post-mock
+- FighterSearchModal updated to use `fighter.name` since `/fighters` now returns objects
+
+### Changed
+- `GET /fighters` response shape changed from `string[]` to `{name, weight_class, is_active}[]`
+
 ## [0.1.10.0] - 2026-04-05
 
 ### Added

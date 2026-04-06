@@ -50,15 +50,19 @@ class APIService {
   }
   
   /**
-   * Get list of fighters
+   * Get list of fighters as objects: [{name, weight_class, is_active}]
    * @param {string} search - Optional search term
    * @param {number} limit - Max results to return
+   * @param {string} weightClass - Optional weight class filter
+   * @param {boolean} activeOnly - When true, only return active fighters
    */
-  async getFighters(search = '', limit = 100) {
+  async getFighters(search = '', limit = 100, weightClass = '', activeOnly = false) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (limit) params.append('limit', limit);
-    
+    if (weightClass) params.append('weight_class', weightClass);
+    if (activeOnly) params.append('active_only', 'true');
+
     const query = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/fighters${query}`);
   }
@@ -84,6 +88,18 @@ class APIService {
         fighter1,
         fighter2,
       }),
+    });
+  }
+
+  /**
+   * Fast prediction without logging to predictions_log.
+   * Returns {winner, confidence, prob_fighter1, prob_fighter2} only.
+   * Use this for previews and auto-loaded display — never for user-initiated picks.
+   */
+  async predictSimple(fighter1, fighter2) {
+    return this.request('/predict/simple', {
+      method: 'POST',
+      body: JSON.stringify({ fighter1, fighter2 }),
     });
   }
   
@@ -132,6 +148,23 @@ class APIService {
    */
   async getHistoricalScorecard(limit = 50, offset = 0) {
     return this.request(`/historical-scorecard?limit=${limit}&offset=${offset}`);
+  }
+
+  /**
+   * Get fight history for a single fighter (last 20 fights)
+   * @param {string} fighterName - Fighter name (URL-encoded internally)
+   */
+  async getFighterHistory(fighterName) {
+    return this.request(`/fighter/${encodeURIComponent(fighterName)}/history`);
+  }
+
+  /**
+   * Run predict/simple for all fights on an event card.
+   * Used by the Dashboard Upset Watch feed.
+   * @param {number} eventId - Event ID from events.json
+   */
+  async getCardPredictions(eventId) {
+    return this.request(`/events/${eventId}/card-predictions`);
   }
 }
 

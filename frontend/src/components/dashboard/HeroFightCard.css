@@ -457,3 +457,10 @@
     gap: var(--spacing-sm);
   }
 }
+/* ── Live prediction on hero card (Gap 14) ───────────────────────────────── */
+.pg-badge { display: block; font-size: 0.7rem; font-weight: 600; margin-top: 4px; }
+.prediction-loading { text-align: center; padding: 0.75rem; font-size: 0.8rem; color: rgba(255,255,255,0.5); }
+.prediction-winner { font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.9); }
+
+/* ── Card Temperature badge (Gap 16) ─────────────────────────────────────── */
+.hero-stats .stat-badge { border: 1px solid; border-radius: 6px; padding: 0.3rem 0.7rem; font-size: 0.78rem; font-weight: 600; background: rgba(0,0,0,0.3); }

@@ -390,3 +390,141 @@ frontend/src/__tests__/AIAnalysis.test.jsx    — new: polling + timeout + fallb
 ```
 
 **Depends on / blocked by:** Phase 5 build (need the components to exist first).
+
+---
+
+## TODO-15 — Phase 4 PRD Audit: Deferred v2 gaps
+
+These gaps were identified in the Phase 4 PRD audit and explicitly deferred.
+Fixed gaps (P1/P2/P3) are tracked in git history.
+
+### v2 (post-auth, post-launch)
+
+**Gap 7 — Analyst Mode: historical perception gap profiles**
+PRD §10.2 asks for "Historical performance of fighters with similar perception gap profiles."
+Requires: aggregate `predictions_log` after it has been seeded with 100+ entries.
+`predictions_log.perception_gap` column exists — query is straightforward once data exists.
+Where: new `/fighter/{name}/similar-gap-history` endpoint + AnalystMode panel.
+
+**Gap 8 — Analyst Mode: Narrative Trap per-trap base rates**
+PRD §10.2 asks for "Statistical backing score for each narrative (strong/weak/trap)" and
+"Historical base rate for this narrative type." Blocked by TODO-07 (NarrativeTrapResult
+still uses `active_traps: list[str]`, not `list[NarrativeTrap]` with base_rate).
+Fix TODO-07 first, then update AnalystMode IntelligenceSection to show per-trap detail.
+
+**Gap 9 — Analyst Mode: Win Path round-range breakdown**
+PRD §10.2 asks for "Which round range the fight is most likely to end in."
+`WinPathResult` has no round distribution field. Requires extending the win_path module
+with round probability buckets (R1, R1-2, R2-3, R3+) — Opus session needed.
+Where: `backend/intelligence/win_path.py` + `WinPathResult.round_distribution: dict`.
+
+**Gap 10 — Analyst Mode: Style collision advantage display**
+PRD §10.2 asks for "Style collision: where each fighter has advantage (striking range,
+clinch, takedown, top control, cardio)." Fight DNA shows dimensions but not the per-zone
+advantage format. Implement after TODO-06 (behavioral DNA dimensions) is resolved.
+
+**Gap 11 — Analyst Mode: Sportsbook odds in Value Bet panel**
+PRD §10.2 asks for "Current sportsbook odds (The Odds API)" and "Implied probability vs
+model probability" in the Value Bet panel. Currently blocked by TODO-03 (fetch_odds.py
+not built). Once odds pipeline is live, `ValueBetResult.implied_prob_f1/f2` have the data.
+Just display them in the Line Crack panel alongside signal + edge_pct.
+
+**Gap 12 — Value Bet panel: Kelly only shows when odds present**
+PRD §10.2 puts Kelly-equivalent bet sizing in the Prediction confidence panel for all
+fights. Currently only shown when `vb.signal !== 'NO_ODDS'`. Post-odds-pipeline, remove
+the conditional and always show Kelly when confidence is meaningful.
+
+**Gap 15 — Fighter browser: Aura score, Composite score on cards**
+PRD §10.4 lists SCIPHR composite score and aura score on fighter profiles. Intelligence
+scores are now computed on-the-fly at profile load. For the fighter browser cards, add
+these scores once the batch scoring job (nightly refresh) populates `fighters.composite_score`
+and `fighters.aura_score` in the DB — avoids N profile fetches on the list page.
+
+**Gap 19 — News ticker: real fight-week content from events.json**
+PRD §10.3 asks for manually curated fight-week updates tagged INJURY / WEIGHT MISS /
+LATE REPLACEMENT / CAMP NEWS. Currently hardcoded placeholder text.
+Schema: add a `news_items: [{text, tag, date}]` array to events.json.
+Frontend: parse and render with per-tag color coding in the ticker.
+
+---
+
+### Post-launch (after predictions_log is seeded via TODO-10)
+
+**Gaps 28-31 — Historical Scorecard full breakdown**
+
+All four scorecard depth gaps are blocked by `predictions_log` being empty at launch.
+
+**Gap 28 — Breakdown stats (main card, favorites, underdogs, edge-detected)**
+PRD shows overall/main-card/favorites/underdogs/edge-detected accuracy tiers.
+Backend: extend `/historical-scorecard` to GROUP BY `is_main_card`, `confidence >= 0.65`,
+`value_signal`. Frontend: add breakdown stat cards above the predictions table.
+
+**Gap 29 — Value Bet ROI tracking**
+PRD shows ROI per signal tier (Edge Detected +12.4%, Strong Edge +18.7%).
+Requires: `odds_at_prediction` populated (currently only when odds pipeline is live) +
+`actual_winner` resolved post-fight. Backend: add ROI computation to scorecard endpoint.
+
+**Gap 30 — Narrative Trap performance section**
+PRD shows "Flagged narratives: Hyped fighter won 44% — below base rate ✓".
+Requires: `narrative_outcomes` table populated post-fight (via admin tool).
+Also blocked by TODO-07 (per-trap NarrativeTrap model with base_rate).
+
+**Gap 31 — Event grouping in predictions table**
+PRD mockup groups predictions under event headers (e.g., "UFC 317 · April 12 2026").
+Requires: `event_id` FK on `predictions_log` populated at predict time (currently NULL
+for ad-hoc predictions). Backend: JOIN predictions_log → events to group by event.
+Frontend: render collapsible event sections in the table.
+
+---
+
+## TODO-16 — Standardise `/events/upcoming` and `/events/past` response shapes
+
+**What:** `/events/upcoming` returns a single event object `{}`. `/events/past` returns
+`{events: [...]}`. Dashboard normalises with `upcomingRes?.events ?? (upcomingRes ? [upcomingRes] : [])`.
+
+**Why:** If `/events/upcoming` is ever refactored to return multiple upcoming events
+(e.g., next two cards), the shape mismatch will silently break the normalisation.
+
+**Fix:** Change `/events/upcoming` to return `{events: [event]}` — single-element array —
+matching the `/events/past` shape. Update Dashboard.jsx to remove the normalisation shim
+and always use `res.events`.
+
+**Where:** `backend/main.py` `/events/upcoming` handler + `frontend/src/pages/Dashboard.jsx`.
+**When:** Before Phase 6 deploy or when the upcoming-events query changes.
+
+---
+
+## TODO-17 — Extract UpsetWatchFeed to its own component file
+
+**What:** `UpsetWatchFeed` is defined inline inside `Dashboard.jsx`.
+
+**Why:** Inline component definitions prevent independent unit testing and reuse
+(e.g., embedding on the HeroFightCard or a standalone page).
+
+**Fix:** Move to `frontend/src/components/dashboard/UpsetWatchFeed.jsx` + matching
+`UpsetWatchFeed.css` (extract relevant `.upset-watch-*` rules from `Dashboard.css`).
+Import it back into Dashboard.jsx. No functional change.
+
+**When:** Before writing Phase 5/6 tests for the dashboard components (see TODO-14).
+
+---
+
+## TODO-18 — Document `card_temperature` field schema in events.json
+
+**What:** `HeroFightCard` reads `event.card_temperature` to render the Card Temperature badge.
+The field is absent from most events — the badge silently hides. No in-repo documentation
+tells the operator which values are valid.
+
+**Why:** Without documentation, the operator populating events.json each fight week has
+no way to know the accepted values or their display meaning.
+
+**Fix:** Add a `_schema` comment block at the top of `backend/events/events.json` (or a
+companion `backend/events/events.schema.json`) documenting:
+```
+card_temperature: "CHALK CARD" | "MIXED CARD" | "CHAOS CARD" | "DOG CARD"
+  CHALK CARD  — heavy-favourite-dominated card (green badge)
+  MIXED CARD  — balanced chalk/dog card (amber badge)
+  CHAOS CARD  — multiple live dogs, volatile card (red badge)
+  DOG CARD    — underdog-heavy card, upset potential (orange badge)
+```
+**When:** Before Phase 6 / operator handoff documentation pass.

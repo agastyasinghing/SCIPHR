@@ -7,6 +7,8 @@ vi.mock('../api/api', () => ({
   default: {
     getUpcomingEvents: vi.fn(),
     getPastEvents: vi.fn(),
+    getCardPredictions: vi.fn().mockResolvedValue([]),
+    predictSimple: vi.fn().mockResolvedValue(null),
   },
 }));
 

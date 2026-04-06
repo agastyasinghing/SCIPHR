@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../../api/api';
 import './AnalystMode.css';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -6,17 +7,42 @@ import {
   Tooltip, Legend,
 } from 'recharts';
 
+// ---------------------------------------------------------------------------
+// Confidence tier helper
+// ---------------------------------------------------------------------------
+const getConfidenceTier = (confidence) => {
+  if (!confidence) return { tier: '—', color: '#6B7280' };
+  if (confidence >= 0.75) return { tier: 'LOCK',     color: '#10B981' };
+  if (confidence >= 0.65) return { tier: 'STRONG',   color: '#3B82F6' };
+  if (confidence >= 0.55) return { tier: 'MODERATE', color: '#F59E0B' };
+  return                         { tier: 'LEAN',     color: '#9CA3AF' };
+};
+
 /*
  * Data flow:
  *   PicksBuilder calls POST /predict → prediction prop
  *   prediction.fighter1_stats / fighter2_stats → stat tabs
  *   prediction.intelligence (all 11 modules)  → Intelligence tab
- *
- * No secondary API call. /detailed-stats is intentionally NOT called here
- * because the same data is already in the prediction prop.
+ *   Fight history fetched separately for each fighter via GET /fighter/:name/history
  */
 const AnalystMode = ({ fighter1, fighter2, prediction }) => {
   const [selectedSection, setSelectedSection] = useState('overview');
+  const [f1History, setF1History] = useState([]);
+  const [f2History, setF2History] = useState([]);
+
+  // Fetch fight history for both fighters when names are known
+  useEffect(() => {
+    if (fighter1?.name) {
+      api.getFighterHistory(fighter1.name)
+        .then(r => setF1History(r?.fights?.slice(0, 5) ?? []))
+        .catch(() => setF1History([]));
+    }
+    if (fighter2?.name) {
+      api.getFighterHistory(fighter2.name)
+        .then(r => setF2History(r?.fights?.slice(0, 5) ?? []))
+        .catch(() => setF2History([]));
+    }
+  }, [fighter1?.name, fighter2?.name]);
 
   const f1Stats = prediction?.fighter1_stats ?? {};
   const f2Stats = prediction?.fighter2_stats ?? {};
@@ -52,6 +78,7 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
   ];
 
   const tabs = ['overview', 'striking', 'grappling', 'rounds', 'advanced', 'intelligence'];
+  const confTier = getConfidenceTier(prediction?.confidence);
 
   return (
     <div className="analyst-mode">
@@ -108,6 +135,9 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
             skillComparisonData={skillComparisonData}
             f1Stats={f1Stats}
             f2Stats={f2Stats}
+            confTier={confTier}
+            f1History={f1History}
+            f2History={f2History}
           />
         )}
         {selectedSection === 'striking' && (
@@ -158,56 +188,143 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
 // ---------------------------------------------------------------------------
 // Overview Section
 // ---------------------------------------------------------------------------
-const OverviewSection = ({ fighter1, fighter2, prediction, skillComparisonData, f1Stats, f2Stats }) => (
-  <div className="overview-section">
-    <div className="momentum-section">
-      <h3>Fighter Momentum</h3>
-      <div className="momentum-grid">
-        <div className="momentum-card left">
-          <h4>{fighter1?.name}</h4>
-          <div className="win-streak">
-            <span className="streak-number">{f1Stats.current_win_streak ?? 0}</span>
-            <span className="streak-label">Win streak</span>
+const OverviewSection = ({
+  fighter1, fighter2, prediction, skillComparisonData,
+  f1Stats, f2Stats, confTier, f1History, f2History,
+}) => {
+  const probF1  = prediction ? (prediction.prob_fighter1 ?? 0) : null;
+  const probF2  = prediction ? (prediction.prob_fighter2 ?? 0) : null;
+  const vb      = prediction?.intelligence?.value_bet;
+  const kelly   = vb && vb.signal !== 'NO_ODDS' && vb.kelly_fraction != null
+    ? `${(vb.kelly_fraction * 100).toFixed(1)}% bankroll (half-Kelly)`
+    : null;
+
+  return (
+    <div className="overview-section">
+      {/* Prediction Confidence Panel */}
+      {prediction && (
+        <div className="prediction-summary">
+          <h3>SCIPHR Prediction</h3>
+          <div className="prediction-card">
+            {/* Dual probability bar */}
+            {probF1 !== null && (
+              <div className="prob-bar-wrapper">
+                <div className="prob-bar">
+                  <div
+                    className="prob-bar-fill prob-bar-f1"
+                    style={{ width: `${(probF1 * 100).toFixed(1)}%` }}
+                  >
+                    <span className="prob-bar-label">{(probF1 * 100).toFixed(1)}%</span>
+                  </div>
+                  <div
+                    className="prob-bar-fill prob-bar-f2"
+                    style={{ width: `${(probF2 * 100).toFixed(1)}%` }}
+                  >
+                    <span className="prob-bar-label">{(probF2 * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+                <div className="prob-bar-names">
+                  <span>{fighter1?.name}</span>
+                  <span>{fighter2?.name}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="prediction-meta-row">
+              <div className="winner-name">{prediction.winner}</div>
+              <span
+                className="confidence-tier-badge"
+                style={{ color: confTier.color, borderColor: `${confTier.color}55` }}
+              >
+                {confTier.tier}
+              </span>
+            </div>
+            <div className="confidence">{((prediction.confidence ?? 0) * 100).toFixed(1)}% Confidence</div>
+            <div className="method">
+              Most likely method: {prediction.intelligence?.win_path?.most_likely_method ?? 'Unknown'}
+            </div>
+            {kelly && (
+              <div className="kelly-hint">
+                <span className="kelly-icon">💰</span>
+                <span>Suggested Kelly: {kelly}</span>
+              </div>
+            )}
           </div>
         </div>
-        <div className="momentum-card right">
-          <h4>{fighter2?.name}</h4>
-          <div className="win-streak">
-            <span className="streak-number">{f2Stats.current_win_streak ?? 0}</span>
-            <span className="streak-label">Win streak</span>
+      )}
+
+      {/* Momentum */}
+      <div className="momentum-section">
+        <h3>Fighter Momentum</h3>
+        <div className="momentum-grid">
+          <div className="momentum-card left">
+            <h4>{fighter1?.name}</h4>
+            <div className="win-streak">
+              <span className="streak-number">{f1Stats.current_win_streak ?? 0}</span>
+              <span className="streak-label">Win streak</span>
+            </div>
+          </div>
+          <div className="momentum-card right">
+            <h4>{fighter2?.name}</h4>
+            <div className="win-streak">
+              <span className="streak-number">{f2Stats.current_win_streak ?? 0}</span>
+              <span className="streak-label">Win streak</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div className="chart-section">
-      <h3>Skill Comparison</h3>
-      <ResponsiveContainer width="100%" height={400}>
-        <RadarChart data={skillComparisonData}>
-          <PolarGrid stroke="#333" />
-          <PolarAngleAxis dataKey="skill" stroke="#fff" />
-          <PolarRadiusAxis stroke="#666" />
-          <Radar name={fighter1?.name} dataKey={fighter1?.name} stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} />
-          <Radar name={fighter2?.name} dataKey={fighter2?.name} stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
-          <Legend />
-        </RadarChart>
-      </ResponsiveContainer>
-    </div>
+      {/* Skill Comparison */}
+      <div className="chart-section">
+        <h3>Skill Comparison</h3>
+        <ResponsiveContainer width="100%" height={400}>
+          <RadarChart data={skillComparisonData}>
+            <PolarGrid stroke="#333" />
+            <PolarAngleAxis dataKey="skill" stroke="#fff" />
+            <PolarRadiusAxis stroke="#666" />
+            <Radar name={fighter1?.name} dataKey={fighter1?.name} stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} />
+            <Radar name={fighter2?.name} dataKey={fighter2?.name} stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+            <Legend />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
 
-    {prediction && (
-      <div className="prediction-summary">
-        <h3>SCIPHR Prediction</h3>
-        <div className="prediction-card">
-          <div className="winner-name">{prediction.winner}</div>
-          <div className="confidence">{((prediction.confidence ?? 0) * 100).toFixed(1)}% Confidence</div>
-          <div className="method">
-            Most likely method: {prediction.intelligence?.win_path?.most_likely_method ?? 'Decision'}
+      {/* Recent Form */}
+      {(f1History.length > 0 || f2History.length > 0) && (
+        <div className="recent-form-section">
+          <h3>Recent Form (Last 5 Fights)</h3>
+          <div className="recent-form-grid">
+            {[
+              { name: fighter1?.name, history: f1History },
+              { name: fighter2?.name, history: f2History },
+            ].map(({ name, history }) => (
+              <div key={name} className="recent-form-col">
+                <h4>{name}</h4>
+                {history.length === 0 ? (
+                  <p className="form-empty">No history available</p>
+                ) : (
+                  <div className="form-list">
+                    {history.map((fight, i) => (
+                      <div key={i} className={`form-row form-row--${fight.result?.toLowerCase()}`}>
+                        <span className={`form-result form-result--${fight.result?.toLowerCase()}`}>
+                          {fight.result === 'W' ? 'W' : 'L'}
+                        </span>
+                        <div className="form-detail">
+                          <span className="form-opponent">{fight.opponent}</span>
+                          <span className="form-method">{fight.method || 'DEC'} · {fight.date}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Striking Section

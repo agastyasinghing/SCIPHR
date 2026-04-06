@@ -270,3 +270,31 @@
     padding: var(--spacing-xl);
   }
 }
+/* ── Intelligence scores section (Gap 23) ───────────────────────────────── */
+.intelligence-card { grid-column: 1 / -1; }
+.intelligence-scores { display: flex; flex-direction: column; gap: 1rem; padding-top: 0.5rem; }
+.score-bar-row { display: flex; flex-direction: column; gap: 4px; }
+.score-bar-header { display: flex; justify-content: space-between; align-items: center; }
+.score-bar-label { font-size: 0.85rem; font-weight: 500; color: rgba(255,255,255,0.8); }
+.score-bar-value { font-size: 0.85rem; font-weight: 700; }
+.score-bar-note { font-size: 0.72rem; color: rgba(255,255,255,0.4); }
+.score-bar-track { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+/* ── Style tag + inactive badge on header (Gaps 25/22) ───────────────────── */
+.fighter-name-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.inactive-badge { font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; background: rgba(107,114,128,0.2); color: #6B7280; border: 1px solid #374151; }
+.style-badge { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; padding: 0.2rem 0.6rem; border-radius: 4px; border: 1px solid; }
+
+/* ── Fight history table (Gap 24) ───────────────────────────────────────── */
+.history-card { grid-column: 1 / -1; }
+.history-loading, .history-empty { font-size: 0.85rem; color: rgba(255,255,255,0.4); padding: 0.5rem 0; }
+.history-table-wrapper { overflow-x: auto; }
+.history-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.history-table th { text-align: left; padding: 0.5rem 0.75rem; color: rgba(255,255,255,0.5); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.history-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(255,255,255,0.8); }
+.history-opponent { cursor: pointer; color: #60A5FA; }
+.history-opponent:hover { text-decoration: underline; }
+.result-badge { font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 4px; }
+.result-w, .result-win { background: rgba(16,185,129,0.2); color: #10B981; }
+.result-l, .result-loss { background: rgba(239,68,68,0.2); color: #EF4444; }
