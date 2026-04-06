@@ -2,6 +2,27 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.14.0] - 2026-04-05
+
+### Added
+- `backend/Dockerfile`: production Docker image for Render deployment; `PYTHONPATH=/app/backend`, repo-root build context, layered pip install for cache efficiency
+- `render.yaml`: Render blueprint with `dockerfilePath`, `dockerContext`, and all required env var stubs (`DATABASE_URL`, `SENTRY_DSN`, `ALLOWED_ORIGINS`, `UPSTASH_REDIS_URL`, `GEMINI_API_KEY`, etc.)
+- `backend/requirements-prod.txt`: trimmed production dependency list (~250MB image vs ~600MB full); excludes matplotlib, seaborn, lightgbm, openpyxl, beautifulsoup4 and other dev-only packages
+- `frontend/vercel.json`: SPA rewrite rule (`/* → /index.html`), Vite build config for Vercel deployment
+- `backend/scripts/seed_scorecard.py`: seeds `predictions_log` with post-dataset-cutoff fights (≥`--after-date`); idempotent via date+fighter pair check; `--dry-run` flag; injects `_predictor` for testing
+- `backend/tests/test_seed_scorecard.py`: 7 tests covering insert, idempotency, was_correct True/False, None predictor skip, date cutoff, and dry-run (263 Python + 34 Vitest all passing)
+- `backend/main.py`: Upstash Redis rate-limiter storage with automatic in-memory fallback on connection failure; `UPSTASH_REDIS_URL` env var controls; ping tested at startup
+- `TODOS.md`: TODO-22 (custom domain DNS wiring), TODO-23 (Render paid tier upgrade trigger)
+
+### Changed
+- `backend/main.py`: `__file__`-anchored paths for model (`../models/golden_model.pkl`) and src (`../src`) — container-safe regardless of working directory
+- `backend/main.py`: all `print()` statements replaced with stdlib `logging` + JSON formatter (`_JSONFormatter`); `LOG_LEVEL` env var controls verbosity; log field structure: `time`, `level`, `logger`, `msg`
+- `backend/main.py`: `/health` response fields renamed per PRD §13: `db` → `db_connected`, `model` → `model_loaded`; `version` field added from `APP_VERSION` env var
+- `backend/main.py`: rate limiter `Limiter(key_func=..., storage_uri=...)` — explicit `if/else` ternary replacing fragile `A and B or C` form
+- `backend/gemini_service.py`: drops `GOOGLE_APPLICATION_CREDENTIALS` service-account-file dependency; uses `GEMINI_API_KEY` + Gemini Developer API REST endpoint exclusively; removes broken `_get_api_key_bearer()` stub and dead Vertex AI branch
+- `backend/tests/test_api_phase3.py`: `/health` assertions updated to `db_connected`/`model_loaded`/`version`; 2 CORS tests added (`[23]` allowed origin, `[24]` blocked origin); total 25 passing
+- `.gitignore`: `*.pkl` wildcard replaced with explicit exclusions (`best_ufc_model.pkl`, `best_ufc_model_v2.pkl`); `golden_model.pkl` (1.9MB) is now committed for Render deployment
+
 ## [0.1.13.0] - 2026-04-05
 
 ### Added
