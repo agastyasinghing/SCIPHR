@@ -32,7 +32,9 @@ class APIService {
       });
       
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        const err = new Error(`API Error: ${response.status} ${response.statusText}`);
+        err.status = response.status;
+        throw err;
       }
       
       return await response.json();
@@ -137,7 +139,14 @@ class APIService {
   async generateAIAnalysis(fighter1, fighter2, predictionData) {
     return this.request('/generate-ai-analysis', {
       method: 'POST',
-      body: JSON.stringify({ fighter1_name: fighter1, fighter2_name: fighter2, prediction: predictionData }),
+      body: JSON.stringify({
+        fighter1,
+        fighter2,
+        winner: predictionData.winner,
+        confidence: predictionData.confidence,
+        fighter1_stats: predictionData.fighter1_stats ?? {},
+        fighter2_stats: predictionData.fighter2_stats ?? {},
+      }),
     });
   }
 

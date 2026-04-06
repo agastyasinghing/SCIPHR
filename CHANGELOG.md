@@ -2,6 +2,25 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.12.0] - 2026-04-05
+
+### Added
+- `AnalystMode`: AI Analysis panel in Overview tab — fires `POST /generate-ai-analysis` async on mount when prediction is present; renders Key Factors, Betting Guidance, Risk Factors, and disclaimer; hidden until analysis is loading/loaded/errored (no empty-header flash)
+- `AnalystMode`: Fight DNA upgraded from simple bars to `RadarChart` (Recharts) across all 8 dimensions (striking, grappling, wrestling, submission, pressure, chin, cardio, speed); null guard prevents crash when `fight_dna` module fails
+
+### Changed
+- `api.js`: `generateAIAnalysis()` request body fixed to match `AIAnalysisRequest` schema — was sending `{fighter1_name, fighter2_name, prediction}`, now sends `{fighter1, fighter2, winner, confidence, fighter1_stats, fighter2_stats}`
+- `api.js`: `request()` now attaches `err.status = response.status` to thrown errors; consumers can check `err.status === 429` instead of parsing error message strings
+- `AnalystMode`: 429 rate-limit errors show "Rate limit reached — try again in an hour." instead of generic error copy
+- `backend/.env.example`: `ANTHROPIC_API_KEY` commented out as optional with note that template analysis is the v1 default; see TODO-19 for Claude SDK wiring
+
+### Added (tests)
+- `AnalystMode.test.jsx`: 9 new tests — AI analysis call on mount, null-prediction guard, successful render of key factors, 429 error copy, 500 error copy, Fight DNA RadarChart renders, null `fight_dna`, empty `f1_dna` null guard; mock updated to include `generateAIAnalysis`
+
+### Added (docs)
+- `TODOS.md` TODO-19: Claude API wiring in `ai_analyst.py` — prompt already built at line 35, needs `anthropic.Anthropic().messages.create()` call + template fallback
+- `TODOS.md` TODO-20: Rate limit counter for `/generate-ai-analysis` — parity with `aiGenerationsLeft` pattern in `FightPoster.jsx`
+
 ## [0.1.11.0] - 2026-04-05
 
 ### Added

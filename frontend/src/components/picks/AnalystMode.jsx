@@ -29,6 +29,9 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
   const [selectedSection, setSelectedSection] = useState('overview');
   const [f1History, setF1History] = useState([]);
   const [f2History, setF2History] = useState([]);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
+  const [aiAnalysisError, setAiAnalysisError] = useState(null);
 
   // Fetch fight history for both fighters when names are known
   useEffect(() => {
@@ -43,6 +46,25 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
         .catch(() => setF2History([]));
     }
   }, [fighter1?.name, fighter2?.name]);
+
+  // Fetch AI analysis when prediction is available (fires once per unique prediction)
+  useEffect(() => {
+    if (!prediction || !fighter1?.name || !fighter2?.name) return;
+    setAiAnalysisLoading(true);
+    setAiAnalysisError(null);
+    setAiAnalysis(null);
+    api.generateAIAnalysis(fighter1.name, fighter2.name, prediction)
+      .then(r => setAiAnalysis(r?.analysis ?? null))
+      .catch(err => {
+        if (err.status === 429) {
+          setAiAnalysisError('Rate limit reached — try again in an hour.');
+        } else {
+          setAiAnalysisError('AI analysis unavailable.');
+        }
+      })
+      .finally(() => setAiAnalysisLoading(false));
+  // Depend on winner+confidence so it refires on a new prediction, not on object identity
+  }, [prediction?.winner, prediction?.confidence]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const f1Stats = prediction?.fighter1_stats ?? {};
   const f2Stats = prediction?.fighter2_stats ?? {};
@@ -138,6 +160,9 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
             confTier={confTier}
             f1History={f1History}
             f2History={f2History}
+            aiAnalysis={aiAnalysis}
+            aiAnalysisLoading={aiAnalysisLoading}
+            aiAnalysisError={aiAnalysisError}
           />
         )}
         {selectedSection === 'striking' && (
@@ -191,6 +216,7 @@ const AnalystMode = ({ fighter1, fighter2, prediction }) => {
 const OverviewSection = ({
   fighter1, fighter2, prediction, skillComparisonData,
   f1Stats, f2Stats, confTier, f1History, f2History,
+  aiAnalysis, aiAnalysisLoading, aiAnalysisError,
 }) => {
   const probF1  = prediction ? (prediction.prob_fighter1 ?? 0) : null;
   const probF2  = prediction ? (prediction.prob_fighter2 ?? 0) : null;
@@ -250,6 +276,48 @@ const OverviewSection = ({
               </div>
             )}
           </div>
+
+          {/* AI Analysis — fires async after prediction renders; hidden until there's content */}
+          {(aiAnalysisLoading || aiAnalysisError || aiAnalysis) && (
+          <div className="ai-analysis-panel">
+            <h4 className="ai-analysis-header">AI Analysis</h4>
+            {aiAnalysisLoading && (
+              <p className="ai-analysis-loading">Analyzing...</p>
+            )}
+            {aiAnalysisError && (
+              <p className="ai-analysis-error">{aiAnalysisError}</p>
+            )}
+            {aiAnalysis && (
+              <>
+                {aiAnalysis.key_factors?.length > 0 && (
+                  <div className="ai-subsection">
+                    <h5>Key Factors</h5>
+                    <ul className="ai-factors-list">
+                      {aiAnalysis.key_factors.map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <div className="ai-subsection">
+                  <h5>Betting Guidance</h5>
+                  <p className="ai-confidence-text">{aiAnalysis.confidence_text}</p>
+                  <p>{aiAnalysis.betting_advice}</p>
+                  {aiAnalysis.implied_odds && (
+                    <p className="ai-implied-odds">Implied odds: {aiAnalysis.implied_odds}</p>
+                  )}
+                </div>
+                {aiAnalysis.risk_factors?.length > 0 && (
+                  <div className="ai-subsection">
+                    <h5>Risk Factors</h5>
+                    <ul className="ai-factors-list">
+                      {aiAnalysis.risk_factors.map((r, i) => <li key={i}>{r}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <p className="ai-disclaimer">{aiAnalysis.disclaimer}</p>
+              </>
+            )}
+          </div>
+          )}
         </div>
       )}
 
@@ -581,34 +649,35 @@ const IntelligenceSection = ({ fighter1, fighter2, intel }) => {
         </div>
       )}
 
-      {/* Fight DNA */}
-      {dna?.available && (
-        <div className="intel-panel">
-          <div className="intel-panel-header">Fight DNA</div>
-          <div className="intel-row">
-            <span className="intel-score">{dna.collision_type?.replace(/_/g, ' ')}</span>
-            <span className="intel-note">
-              Clash intensity: {((dna.style_clash_intensity ?? 0) * 100).toFixed(0)}%
-            </span>
-          </div>
-          {Object.keys(dna.f1_dna ?? {}).length > 0 && (
-            <div className="intel-dna-grid">
-              {Object.entries(dna.f1_dna).map(([dim, val]) => (
-                <div key={dim} className="intel-dna-row">
-                  <span className="intel-dna-dim">{dim}</span>
-                  <div className="intel-dna-bars">
-                    <div className="intel-dna-bar intel-dna-bar--f1" style={{ width: `${(val * 100).toFixed(0)}%` }} />
-                    <div
-                      className="intel-dna-bar intel-dna-bar--f2"
-                      style={{ width: `${((dna.f2_dna?.[dim] ?? 0) * 100).toFixed(0)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+      {/* Fight DNA — RadarChart across 8 dimensions */}
+      {dna?.available && Object.keys(dna.f1_dna ?? {}).length > 0 && (() => {
+        const dnaData = Object.keys(dna.f1_dna).map(dim => ({
+          dim: dim.charAt(0).toUpperCase() + dim.slice(1),
+          [fighter1?.name]: dna.f1_dna[dim],
+          [fighter2?.name]: dna.f2_dna?.[dim] ?? 0,
+        }));
+        return (
+          <div className="intel-panel">
+            <div className="intel-panel-header">Fight DNA</div>
+            <div className="intel-row">
+              <span className="intel-score">{dna.collision_type?.replace(/_/g, ' ')}</span>
+              <span className="intel-note">
+                Clash intensity: {((dna.style_clash_intensity ?? 0) * 100).toFixed(0)}%
+              </span>
             </div>
-          )}
-        </div>
-      )}
+            <ResponsiveContainer width="100%" height={300}>
+              <RadarChart data={dnaData}>
+                <PolarGrid stroke="#333" />
+                <PolarAngleAxis dataKey="dim" stroke="#fff" tick={{ fontSize: 11 }} />
+                <PolarRadiusAxis domain={[0, 1]} stroke="#666" tick={false} />
+                <Radar name={fighter1?.name} dataKey={fighter1?.name} stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} />
+                <Radar name={fighter2?.name} dataKey={fighter2?.name} stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+                <Legend />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })()}
 
       {/* Value Bet */}
       {vb && vb.signal !== 'NO_ODDS' && (

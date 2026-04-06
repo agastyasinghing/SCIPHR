@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import AnalystMode from '../components/picks/AnalystMode';
 
@@ -6,6 +6,7 @@ vi.mock('../api/api', () => ({
   default: {
     request: vi.fn(),
     getFighterHistory: vi.fn().mockResolvedValue([]),
+    generateAIAnalysis: vi.fn().mockResolvedValue({ analysis: null }),
   },
 }));
 
@@ -82,6 +83,93 @@ describe('AnalystMode — null intelligence modules do not crash', () => {
 
   it('renders with null prediction prop', () => {
     render(<AnalystMode fighter1={f1} fighter2={f2} prediction={null} />);
+    expect(document.querySelector('.analyst-mode')).toBeTruthy();
+  });
+});
+
+describe('AnalystMode — AI analysis', () => {
+  beforeEach(() => {
+    api.generateAIAnalysis.mockClear();
+  });
+
+  it('calls generateAIAnalysis when prediction is present', async () => {
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={mockPrediction} />);
+    await waitFor(() => expect(api.generateAIAnalysis).toHaveBeenCalledWith(
+      f1.name, f2.name, mockPrediction
+    ));
+  });
+
+  it('does not call generateAIAnalysis when prediction is null', () => {
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={null} />);
+    expect(api.generateAIAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('renders AI analysis key factors when loaded', async () => {
+    api.generateAIAnalysis.mockResolvedValue({
+      analysis: {
+        key_factors: ['Striking advantage', 'Reach edge'],
+        confidence_level: 'HIGH',
+        confidence_text: 'Strong pick with clear advantages',
+        betting_advice: 'Strong value on Islam Makhachev',
+        risk_factors: ['MMA is inherently unpredictable'],
+        implied_odds: '-150',
+        disclaimer: 'Not financial advice.',
+      },
+    });
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={mockPrediction} />);
+    await waitFor(() => expect(screen.getByText('Striking advantage')).toBeTruthy());
+    expect(screen.getByText('Strong value on Islam Makhachev')).toBeTruthy();
+  });
+
+  it('shows rate limit message on 429', async () => {
+    const err = new Error('API Error: 429 Too Many Requests');
+    err.status = 429;
+    api.generateAIAnalysis.mockRejectedValue(err);
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={mockPrediction} />);
+    await waitFor(() =>
+      expect(screen.getByText(/Rate limit reached/i)).toBeTruthy()
+    );
+  });
+
+  it('shows generic error on 500', async () => {
+    const err = new Error('API Error: 500 Internal Server Error');
+    err.status = 500;
+    api.generateAIAnalysis.mockRejectedValue(err);
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={mockPrediction} />);
+    await waitFor(() =>
+      expect(screen.getByText(/AI analysis unavailable/i)).toBeTruthy()
+    );
+  });
+});
+
+describe('AnalystMode — Fight DNA RadarChart', () => {
+  it('renders Fight DNA section when dna is available', () => {
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={mockPrediction} />);
+    fireEvent.click(screen.getByText('Intelligence'));
+    expect(screen.getByText('Fight DNA')).toBeTruthy();
+  });
+
+  it('does not crash when fight_dna is null', () => {
+    const pred = {
+      ...mockPrediction,
+      intelligence: { ...mockPrediction.intelligence, fight_dna: null },
+    };
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={pred} />);
+    fireEvent.click(screen.getByText('Intelligence'));
+    // Should not throw; Fight DNA panel simply not rendered
+    expect(document.querySelector('.analyst-mode')).toBeTruthy();
+  });
+
+  it('does not crash when fight_dna.f1_dna is empty', () => {
+    const pred = {
+      ...mockPrediction,
+      intelligence: {
+        ...mockPrediction.intelligence,
+        fight_dna: { available: true, f1_dna: {}, f2_dna: {}, collision_type: 'UNKNOWN', style_clash_intensity: 0 },
+      },
+    };
+    render(<AnalystMode fighter1={f1} fighter2={f2} prediction={pred} />);
+    fireEvent.click(screen.getByText('Intelligence'));
     expect(document.querySelector('.analyst-mode')).toBeTruthy();
   });
 });

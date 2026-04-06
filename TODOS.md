@@ -528,3 +528,82 @@ card_temperature: "CHALK CARD" | "MIXED CARD" | "CHAOS CARD" | "DOG CARD"
   DOG CARD    — underdog-heavy card, upset potential (orange badge)
 ```
 **When:** Before Phase 6 / operator handoff documentation pass.
+
+---
+
+## TODO-19 — Wire actual Claude API in ai_analyst.py (post-launch)
+
+**What:** Replace the always-template path in `generate_fight_analysis()` with a real
+`anthropic.Anthropic().messages.create()` call when `ANTHROPIC_API_KEY` is set,
+falling back to `_generate_template_analysis()` on any exception.
+
+**Why:** The full prompt is already built (`ai_analyst.py:35–70`) — it feeds fighter stats,
+records, and the XGBoost prediction into a structured analyst prompt. The only thing
+missing is the actual API call. Template output is solid for v1 launch; Claude analysis
+would add narrative depth and more contextual betting guidance.
+
+**Pros:**
+- Prompt is already written and tested against template output — minimal new work.
+- Template fallback means Claude failure is invisible to users.
+- Differentiates SCIPHR's "AI analyst" framing from a pure stats tool.
+
+**Cons:**
+- API cost per analysis call (~$0.005–0.02 depending on model).
+- Adds ~1–3s latency to `/generate-ai-analysis` (already async via `asyncio.to_thread`).
+- Requires `ANTHROPIC_API_KEY` in production environment.
+
+**Implementation (ai_analyst.py):**
+```python
+import anthropic
+
+def generate_fight_analysis(self, prediction_data):
+    prompt = self._build_prompt(prediction_data)  # extract existing prompt build
+    try:
+        client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",  # fast + cheap for structured output
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return self._parse_claude_response(message.content[0].text, prediction_data)
+    except Exception:
+        return self._generate_template_analysis(prediction_data)
+```
+
+**Current state:** `ai_analyst.py` builds the prompt at line 35 then immediately calls
+`_generate_template_analysis()` at line 74. Template fallback exists and is well-tested.
+`ANTHROPIC_API_KEY` is in `.env.example` as a commented-out optional field.
+
+**Where to start:** `backend/ai_analyst.py` — extract prompt build to `_build_prompt()`,
+add `anthropic` import, wrap API call in try/except → template fallback.
+
+**Depends on / blocked by:** Nothing. Standalone. Do after v1 paper launch confirms
+template output quality is insufficient for users.
+
+---
+
+## TODO-20 — Rate limit visibility for /generate-ai-analysis
+
+**What:** Show the user how many AI analysis calls remain before hitting the 3/hr rate
+limit, matching the `aiGenerationsLeft` counter already on the AI poster in `FightPoster.jsx`.
+
+**Why:** Users hit 429 with no warning — the error message appears only after the limit is
+reached. The poster already sets user expectations ("1 left") before they run out.
+
+**Pros:**
+- UX parity with the AI poster flow.
+- Reduces surprise 429 errors.
+
+**Cons:**
+- The rate limit is IP-based on the backend (slowapi). There is no API endpoint to query
+  remaining quota — we'd have to track client-side in state (optimistic counter), which
+  can drift if the user has multiple tabs open or reloads.
+- 3/hr is generous enough that most users won't hit it.
+
+**Implementation:** Add `aiAnalysisLeft` state (init: 1) to `AnalystMode.jsx`.
+Decrement on successful `generateAIAnalysis()` call. Show "X remaining" copy near the
+AI Analysis panel. Pattern: `FightPoster.jsx` lines 28, 91 (aiGenerationsLeft).
+
+**Depends on / blocked by:** Phase 5 AI analysis wiring (TODO-20 builds on top of it).
+Consider doing this at the same time as TODO-19 (Claude wiring) since that's when
+per-call cost makes quota visibility matter most.
