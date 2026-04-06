@@ -13,7 +13,7 @@
 | Phase 3 — API Layer | ✅ Complete | Intelligence wired, /health, /events, Sentry |
 | Phase 4 — Frontend Wiring | ✅ Complete | api.js wired, badges, intel tab, dashboard events, scorecard shell |
 | Phase 5 — Claude + Poster | ✅ Complete | AI analysis wired (template), Fight DNA RadarChart, 429 handling |
-| Phase 6 — Deploy | 🔴 Not Started | Vercel + Railway + Supabase |
+| Phase 6 — Deploy | 🟡 In Progress | Render + Vercel + Supabase |
 
 ---
 
@@ -35,14 +35,67 @@
 ---
 
 ## In Progress
-Phase 6 — Deploy (next up).
+Phase 6 — Deploy. Code complete. Needs platform setup + env vars.
+
+---
+
+## Phase 6 Code — Completed This Session
+
+| Item | File(s) | Status |
+|---|---|---|
+| Dockerfile (Render, repo-root build context) | `backend/Dockerfile` | ✅ |
+| render.yaml | `render.yaml` | ✅ |
+| requirements-prod.txt (trimmed, ~250MB image) | `backend/requirements-prod.txt` | ✅ |
+| vercel.json (SPA routing) | `frontend/vercel.json` | ✅ |
+| `__file__`-anchored model/src paths (container-safe) | `backend/main.py` | ✅ |
+| stdlib JSON logging (replaces all print()) | `backend/main.py` | ✅ |
+| /health renamed: db_connected, model_loaded, version | `backend/main.py` | ✅ |
+| Upstash Redis for rate limiter (in-memory fallback) | `backend/main.py` | ✅ |
+| CORS locked to env var (already was; now tested) | `backend/tests/test_api_phase3.py` | ✅ |
+| Sentry backend (already wired; needs DSN in Render) | `backend/main.py` | ✅ |
+| gemini_service.py — GEMINI_API_KEY only (no service account file) | `backend/gemini_service.py` | ✅ |
+| seed_scorecard.py — post-cutoff seeding, idempotent, --dry-run | `backend/scripts/seed_scorecard.py` | ✅ |
+| test_seed_scorecard.py (7 tests) | `backend/tests/test_seed_scorecard.py` | ✅ |
+| golden_model.pkl unblocked from .gitignore | `.gitignore` | ✅ |
+
+## Platform Setup Required (manual steps — cannot be automated)
+
+### Render (backend)
+1. Connect GitHub repo in Render dashboard
+2. Set `dockerfilePath: ./backend/Dockerfile`, `dockerContext: .`
+3. Set env vars (Render dashboard → Environment):
+   - `DATABASE_URL` — Supabase connection string (already live)
+   - `SENTRY_DSN` — new Render/backend Sentry project DSN
+   - `ALLOWED_ORIGINS` — `https://sciphr.vercel.app` (update after Vercel deploy)
+   - `UPSTASH_REDIS_URL` — create free Upstash Redis at upstash.com
+   - `GEMINI_API_KEY` — Google AI Studio key
+   - `GOOGLE_CLOUD_PROJECT_ID` — GCP project (optional; poster works without it)
+   - `ODDS_API_KEY` — The Odds API key
+   - `APP_VERSION` — `v0.1.13.0`
+4. Set health check path: `/health`
+
+### Vercel (frontend)
+1. Connect GitHub repo in Vercel dashboard
+2. Set root directory: `frontend`
+3. Set env vars:
+   - `VITE_API_URL` — `https://sciphr-api.onrender.com` (after Render deploy)
+   - `VITE_SENTRY_DSN` — new Vercel/frontend Sentry project DSN
+4. `vercel.json` handles SPA routing automatically
+
+### Post-deploy
+1. UptimeRobot: create free monitor → `https://sciphr-api.onrender.com/health`, every 14 min
+2. Run seeding script against Supabase:
+   `python backend/scripts/seed_scorecard.py --after-date 2025-07-01 --dry-run` (preview first)
+   `python backend/scripts/seed_scorecard.py --after-date 2025-07-01`
+3. Google Cloud cost alert: $10/mo budget for Imagen (TODO-21)
+4. Sentry: create two projects (backend Python, frontend React)
 
 ---
 
 ## Next 3 Tasks
-1. Start Phase 6: Railway deploy (backend), Vercel deploy (frontend), Supabase production DB
-2. Run TODO-10 seeding session: add winner_actual column, seed predictions_log with historical fights for scorecard
-3. Fix /health response field names (TODO-12) before deploy — rename db→db_connected, model→model_loaded, add version
+1. Follow platform setup checklist above (Render → Vercel → UptimeRobot)
+2. Run seed_scorecard.py against production Supabase after deploy
+3. Paper launch: share with 2-3 fight cards before public announcement
 
 ## Phase 4 PRD Audit — Gaps Fixed (April 2026)
 

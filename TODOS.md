@@ -5,6 +5,44 @@ be actionable in 3 months without re-deriving the motivation.
 
 ---
 
+## TODO-22 — Custom domain wiring (post-launch)
+
+**What:** Configure DNS for `sciphr.com` (apex → Vercel) and `api.sciphr.com` (CNAME → Render).
+
+**Why:** v1 ships with platform URLs (`sciphr.vercel.app`, `sciphr-api.onrender.com`).
+Custom domain requires two env var updates: `VITE_API_URL` in Vercel → `https://api.sciphr.com`,
+and `ALLOWED_ORIGINS` in Render → `https://sciphr.com,https://www.sciphr.com`.
+
+**Trigger:** When domain is purchased and paper launch is complete.
+
+**Steps:**
+1. Add ALIAS/ANAME record for apex: `sciphr.com → cname.vercel-dns.com`
+2. Add CNAME: `api.sciphr.com → sciphr-api.onrender.com`
+3. Update `VITE_API_URL` in Vercel dashboard
+4. Update `ALLOWED_ORIGINS` in Render dashboard
+5. Redeploy both services (Vercel auto-redeploys on env var change; Render needs manual trigger)
+
+**Depends on:** Domain registration, paper launch complete.
+
+---
+
+## TODO-23 — Upgrade Render service to paid tier ($7/mo) post paper-launch
+
+**What:** Upgrade the `sciphr-api` Render service from free to Starter ($7/mo).
+
+**Why:** Render free tier spins down after 15 min of inactivity, causing 5–15s cold starts
+on first user request. UptimeRobot pings keep it warm during paper launch, but cold starts
+are unacceptable at public launch scale.
+
+**Trigger:** When announcing publicly or when cold-start complaints appear from users.
+
+**How:** Render dashboard → sciphr-api → Settings → Plan → Starter.
+No code changes required — plan upgrade is purely infrastructure.
+
+**Depends on:** Successful paper launch (confirm product works before paying).
+
+---
+
 ## TODO-01 — Alembic migration versioning
 
 **What:** Set up Alembic for schema version control in `backend/db/migrations/`.
@@ -251,6 +289,12 @@ prevents accidental assignment). Add it back when data source is available.
 
 ---
 
+## ~~TODO-10~~ — /historical-scorecard endpoint + data seeding ✅ RESOLVED (Phase 6)
+
+> `predictions_log` already had `actual_winner` + `was_correct` columns from Phase 1.
+> `backend/scripts/seed_scorecard.py` now seeds post-cutoff fights (≥2025-07-01).
+> Run: `python backend/scripts/seed_scorecard.py --after-date 2025-07-01`
+
 ## TODO-10 — /historical-scorecard endpoint + data seeding
 
 **What:** Design and build the `/historical-scorecard` API endpoint and the
@@ -291,6 +335,11 @@ frontend page design, Alembic setup (TODO-01) for the schema migration.
 
 ---
 
+## ~~TODO-11~~ — Structured logging in main.py ✅ RESOLVED (Phase 6)
+
+> stdlib `logging` + JSON formatter configured at top of `main.py`.
+> All `print()` calls replaced with `log.info/debug/warning/error()`.
+
 ## TODO-11 — Structured logging in main.py
 
 **What:** Replace ~15 `print()` debug statements in `main.py` with
@@ -322,6 +371,10 @@ verbose traces with `log.debug(...)`, and error blocks with `log.error(...)`.
 **Depends on:** Nothing. Standalone cleanup pass.
 
 ---
+
+## ~~TODO-12~~ — /health response field names ✅ RESOLVED (Phase 6)
+
+> Fields renamed: `db` → `db_connected`, `model` → `model_loaded`, `version` added.
 
 ## TODO-12 — /health response field names (fix before deploy)
 
