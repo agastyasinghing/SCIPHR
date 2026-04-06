@@ -1,18 +1,21 @@
 """
 Gemini AI Service
-Handles AI poster generation using Imagen 4 Ultra on Vertex AI
-Uses OAuth service account authentication
+Generates AI fight posters via the Gemini Developer API (Imagen 4 Ultra).
+
+Auth: GEMINI_API_KEY env var — no service account file required.
+Cost: $0.06/image via Imagen 4 Ultra.
 """
 
+import logging
 import os
 import random
 import requests
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# Poster styles
+log = logging.getLogger(__name__)
+
 POSTER_STYLES = [
     {
         'name': 'Cinematic Photorealistic',
@@ -58,8 +61,8 @@ POSTER_STYLES = [
 
 
 def build_poster_prompt(fighter1_data, fighter2_data, prediction_data, style):
-    """Build detailed prompt for image generation"""
-    prompt = f"""
+    """Build detailed prompt for image generation."""
+    return f"""
 Create a professional UFC fight poster in {style['prompt']} style.
 
 FIGHTERS:
@@ -95,7 +98,6 @@ STYLE: {style['prompt']}
 
 Make this poster epic, cinematic, shareable, and professional. All text must be clearly readable. Vertical poster format.
 """
-    return prompt
 
 
 def generate_ai_poster(
@@ -106,70 +108,48 @@ def generate_ai_poster(
     aspect_ratio: str = "1:1",
 ):
     """
-    Generate AI poster using Imagen 4 Ultra on Vertex AI.
+    Generate AI poster using Imagen 4 Ultra via the Gemini Developer API.
     Cost: $0.06 per image.
 
+    Auth: GEMINI_API_KEY env var only — no service account file required.
     aspect_ratio: "1:1" (standard, default) | "9:16" (Instagram Story format).
+
+    Returns:
+        {"success": True, "style_name": ..., "image_url": "data:image/png;base64,..."}
+        {"success": False, "error": "..."}
     """
-    # Validate credentials at request time, not module import time.
-    # Missing credentials makes this feature unavailable — it must not crash the server.
-    credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-    project_id = os.getenv('GOOGLE_CLOUD_PROJECT_ID')
+    api_key = os.getenv("GEMINI_API_KEY")
 
-    if not credentials_path or not project_id:
+    if not api_key:
         return {
-            'success': False,
-            'error': 'AI poster generation is not configured. Set GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT_ID in .env.'
+            "success": False,
+            "error": "AI poster generation is not configured. Set GEMINI_API_KEY in environment.",
         }
 
     try:
-        from google.auth.transport.requests import Request
-        from google.oauth2 import service_account
-
-        credentials = service_account.Credentials.from_service_account_file(
-            credentials_path,
-            scopes=['https://www.googleapis.com/auth/cloud-platform']
+        style = (
+            next((s for s in POSTER_STYLES if s["name"] == style_name), POSTER_STYLES[0])
+            if style_name
+            else random.choice(POSTER_STYLES)
         )
-    except Exception as e:
-        return {
-            'success': False,
-            'error': f'Failed to load Google credentials: {e}'
-        }
 
-    location = 'us-central1'
-
-    try:
-        # Pick random style
-        if style_name:
-            style = next((s for s in POSTER_STYLES if s['name'] == style_name), POSTER_STYLES[0])
-        else:
-            style = random.choice(POSTER_STYLES)
-
-        print(f"\n{'='*70}")
-        print(f"GENERATING AI POSTER (Imagen 4 Ultra)")
-        print(f"{'='*70}")
-        print(f"Style: {style['name']}")
-        print(f"Matchup: {fighter1_data['name']} vs {fighter2_data['name']}")
-        print(f"Cost: $0.06")
-        print(f"{'='*70}\n")
+        log.info(
+            "poster_generation_start",
+            extra={
+                "style": style["name"],
+                "fighter1": fighter1_data["name"],
+                "fighter2": fighter2_data["name"],
+            },
+        )
 
         prompt = build_poster_prompt(fighter1_data, fighter2_data, prediction_data, style)
 
-        credentials.refresh(Request())
-        access_token = credentials.token
-
-        print(f"OAuth token obtained")
-        print(f"Sending authenticated request to Imagen 4 Ultra...")
-
+        # Gemini Developer API — API key auth, no service account required.
         endpoint = (
-            f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}"
-            f"/locations/{location}/publishers/google/models/imagen-4.0-ultra-generate-001:predict"
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"imagen-4.0-ultra-generate-001:predict?key={api_key}"
         )
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Content-Type": "application/json"}
 
         payload = {
             "instances": [{"prompt": prompt}],
@@ -177,46 +157,36 @@ def generate_ai_poster(
                 "sampleCount": 1,
                 "aspectRatio": aspect_ratio,
                 "negativePrompt": "blurry, low quality, distorted, text errors",
-                "personGeneration": "allow_adult"
-            }
+                "personGeneration": "allow_adult",
+            },
         }
 
         response = requests.post(endpoint, json=payload, headers=headers, timeout=60)
 
         if response.status_code != 200:
-            raise Exception(f"Vertex AI Error {response.status_code}: {response.text}")
+            raise Exception(f"API Error {response.status_code}: {response.text[:200]}")
 
         data = response.json()
+        if "predictions" not in data or not data["predictions"]:
+            raise Exception("No predictions in response")
 
-        if "predictions" in data and len(data["predictions"]) > 0:
-            prediction = data["predictions"][0]
+        prediction = data["predictions"][0]
+        image_base64 = prediction.get("bytesBase64Encoded") or prediction.get("image")
+        if not image_base64:
+            raise Exception("No image data in response")
 
-            if "bytesBase64Encoded" in prediction:
-                image_base64 = prediction["bytesBase64Encoded"]
-            elif "image" in prediction:
-                image_base64 = prediction["image"]
-            else:
-                raise Exception("No image data in response")
+        log.info("poster_generation_success", extra={"style": style["name"]})
 
-            img_data_url = f"data:image/png;base64,{image_base64}"
-
-            print("Imagen 4 Ultra poster generated!\n")
-
-            return {
-                'success': True,
-                'style_name': style['name'],
-                'image_url': img_data_url,
-                'model_used': 'imagen-4.0-ultra',
-                'cost': 0.06
-            }
-
-        raise Exception("No predictions in response")
+        return {
+            "success": True,
+            "style_name": style["name"],
+            "image_url": f"data:image/png;base64,{image_base64}",
+            "model_used": "imagen-4.0-ultra",
+            "cost": 0.06,
+        }
 
     except Exception as e:
-        print(f"Error generating poster: {e}")
-        import traceback
-        print(traceback.format_exc())
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        log.error("poster_generation_failed", extra={"error": str(e)})
+        return {"success": False, "error": str(e)}
+
+
