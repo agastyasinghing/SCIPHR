@@ -18,13 +18,13 @@
 ---
 
 ## Current State
-**What exists:** FastAPI backend + React v2 frontend. XGBoost model at 85.7% accuracy. All P0 bugs fixed. Supabase live (8,231 fights, 2,615 fighters). All 9 intelligence modules implemented (44/44 tests). Phase 4 complete: api.js wired, intelligence badges in FightPoster, Intelligence tab in AnalystMode (all 11 signals), Dashboard fetches real events, HistoricalScorecard page shell, GET /historical-scorecard endpoint, vitest test scaffold (5 test files).
+**What exists:** FastAPI backend + React v2 frontend. XGBoost model at 85.7% accuracy. All P0 bugs fixed. Supabase live (8,231 fights, 2,615 fighters). All 9 intelligence modules implemented (44/44 tests). Phase 4 complete + PRD audit P1/P2/P3 gaps resolved: HeroFightCard fetches live prediction, Upset Watch feed, Editor's Picks relabeled, ModelPerformance subtitle honest, compact intelligence signals in FightPoster, Analyst Mode probability bar + confidence tier + fight history, /fighters returns objects with weight_class/is_active, weight class + active/inactive filter fixed, FighterProfile intelligence scores + fight history + style tag + predict CTA.
 
 **What is broken:** Nothing critical.
 
-**What is fake:** `generate_recent_record()` in main.py uses random.seed() to fabricate W/L history — known placeholder. HistoricalScorecard shows empty state (predictions_log empty at launch, no seeding yet — TODO-10).
+**What is fake:** HistoricalScorecard shows empty state (predictions_log empty at launch, no seeding yet — TODO-10). News ticker is hardcoded placeholder text (TODO-15 documents the schema).
 
-**What is missing:** Claude analysis wiring (Phase 5). AI poster Phase 5. Scorecard seeding (TODO-10).
+**What is missing:** Claude analysis wiring (Phase 5). AI poster Phase 5. Scorecard seeding (TODO-10). Card Temperature requires `card_temperature` field in events.json (operator must populate manually — see TODO-15). Scorecard breakdown stats (Gaps 28-31, deferred to post-launch in TODO-15).
 
 ---
 
@@ -43,6 +43,26 @@ Phase 5 — Claude + Poster (next up).
 1. Start Phase 5: wire Claude analysis async call in AnalystMode (POST /generate-ai-analysis after prediction renders)
 2. Wire AI poster generation flow (already built in FightPoster — verify rate-limit error handling is correct)
 3. Run TODO-10 seeding session: add winner_actual population tool, seed predictions_log with historical fights
+
+## Phase 4 PRD Audit — Gaps Fixed (April 2026)
+
+| Gap | Fix | Files |
+|---|---|---|
+| Gap 1-3: FightPoster compact signals | Added Perception Gap, Chaos tier, Edge Detected below prediction stamp | FightPoster.jsx |
+| Gap 4-6: Analyst Overview panel | Dual probability bar, confidence tier (LEAN/MODERATE/STRONG/LOCK), Kelly sizing | AnalystMode.jsx |
+| Gap 13: Analyst fight history | useEffect fetches GET /fighter/:name/history for both fighters | AnalystMode.jsx, api.js |
+| Gap 14: HeroFightCard prediction | Calls api.predictFight() on mount, renders confidence bar + Perception Gap badges | HeroFightCard.jsx |
+| Gap 16: Card Temperature | Reads event.card_temperature from events.json, displays in HeroFightCard | HeroFightCard.jsx |
+| Gap 17: HotTakes labeling | Relabeled "Editor's Picks" with "not model output" subtitle | Dashboard.jsx, HotTakes.jsx |
+| Gap 18: Upset Watch feed | GET /events/{id}/card-predictions endpoint + UpsetWatchFeed section | main.py, Dashboard.jsx, api.js |
+| Gap 20: Fake ModelPerformance subtitle | Replaced with honest "tracked on Historical Scorecard" link | Dashboard.jsx |
+| Gap 21: Weight class filter broken | /fighters returns objects; filter uses weight_class field correctly | main.py, FighterSearch.jsx |
+| Gap 22: Active/inactive filter | Added status filter dropdown (All/Active/Inactive) | FighterSearch.jsx |
+| Gap 23: Fighter intelligence scores | Computed on-the-fly: composite, aura, chaos contribution, mirage meter | main.py, FighterProfile.jsx |
+| Gap 24: Fighter fight history | Calls GET /fighter/:name/history, renders table | FighterProfile.jsx, api.js |
+| Gap 25: Style tag on profile | classify_style() result added to /fighter/:name response and profile card | main.py, FighterProfile.jsx |
+| Gap 26: Predict CTA on profile | "Predict a fight with {name}" button → /picks?fighter1=Name | FighterProfile.jsx, PicksBuilder.jsx |
+| Gap 27: Weight class on fighter cards | Colored weight class badge on each card in FighterSearch grid | FighterSearch.jsx |
 
 ---
 

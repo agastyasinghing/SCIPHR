@@ -54,7 +54,16 @@
       "Bash(npm install:*)",
       "Bash(npm test:*)",
       "Bash(npx vitest:*)",
-      "Bash(python -m pytest tests/test_historical_scorecard.py -v)"
+      "Bash(python -m pytest tests/test_historical_scorecard.py -v)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('main.py: OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py', encoding='utf-8'\\).read\\(\\)\\); print\\('main.py: OK'\\)\")",
+      "Bash(node -e ':*)",
+      "Bash(npm run:*)",
+      "Bash(tee /tmp/ship_vitest.txt)",
+      "Bash(tee /tmp/ship_pytest.txt)",
+      "Bash(wait)",
+      "Bash(tee /tmp/ship_vitest2.txt)",
+      "Bash(tee /tmp/ship_pytest2.txt)"
     ]
   }
 }
