@@ -54,11 +54,13 @@ def client_with_fighters(engine):
 
 
 def test_fighters_endpoint_returns_db_names(client_with_fighters):
-    """GET /fighters should include names that came from the fighters table."""
+    """GET /fighters should include names that came from the fighters table.
+    Each item is now an object {name, weight_class, is_active}."""
     resp = client_with_fighters.get("/fighters")
     assert resp.status_code == 200
     data = resp.json()
-    names = data if isinstance(data, list) else data.get("fighters", [])
+    items = data if isinstance(data, list) else data.get("fighters", [])
+    names = [f["name"] if isinstance(f, dict) else f for f in items]
     assert "Jon Jones" in names
     assert "Stipe Miocic" in names
 
@@ -68,5 +70,5 @@ def test_fighters_endpoint_empty_db_returns_empty_list(client_empty_db):
     resp = client_empty_db.get("/fighters")
     assert resp.status_code == 200
     data = resp.json()
-    names = data if isinstance(data, list) else data.get("fighters", [])
-    assert names == []
+    items = data if isinstance(data, list) else data.get("fighters", [])
+    assert items == []

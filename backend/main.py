@@ -15,6 +15,7 @@ from sqlalchemy import create_engine, text
 from gemini_service import generate_ai_poster
 from ai_analyst import ai_analyst
 from intelligence.orchestrator import IntelligenceOrchestrator
+from intelligence.utils import classify_style
 
 # ── Sentry ────────────────────────────────────────────────────────────────────
 # Initialised only when SENTRY_DSN env var is set — no-op otherwise.
@@ -282,6 +283,24 @@ async def get_upcoming_event():
     raise HTTPException(status_code=404, detail="No events found")
 
 
+@app.get("/events/past")
+async def get_past_events():
+    """
+    Return all past events sorted most-recent first.
+
+    Used by the Dashboard EventsTimeline.
+    """
+    from datetime import date as _date
+    today = str(_date.today())
+    all_events = events_data.get("events", [])
+    past = sorted(
+        [e for e in all_events if e.get("date", "") < today],
+        key=lambda e: e.get("date", ""),
+        reverse=True,
+    )
+    return {"events": past}
+
+
 @app.get("/events/{event_id}")
 async def get_event(event_id: int):
     """
@@ -301,30 +320,57 @@ async def get_event(event_id: int):
 
 
 @app.get("/fighters")
-async def get_fighters(search: str = None, limit: int = Query(default=100, le=500)):
-    """Get list of available fighters — always queries the DB, never the startup cache."""
+async def get_fighters(
+    search: str = None,
+    limit: int = Query(default=100, le=500),
+    weight_class: str = None,
+    active_only: bool = False,
+):
+    """
+    Get list of available fighters as objects with name, weight_class, is_active.
+
+    Supports optional filters:
+      weight_class — case-sensitive weight class string (e.g. "Lightweight")
+      active_only  — when True, omit fighters where is_active = false
+    """
     if engine is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
 
-    with engine.connect() as conn:
-        if search:
-            rows = conn.execute(
-                text("SELECT name FROM fighters WHERE LOWER(name) LIKE LOWER(:q) ORDER BY name LIMIT :lim"),
-                {"q": f"%{search}%", "lim": limit},
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                text("SELECT name FROM fighters ORDER BY name LIMIT :lim"),
-                {"lim": limit},
-            ).fetchall()
+    clauses = []
+    params: dict = {"lim": limit}
 
-    fighters = [row[0] for row in rows]
+    if search:
+        clauses.append("LOWER(name) LIKE LOWER(:q)")
+        params["q"] = f"%{search}%"
+    if weight_class:
+        clauses.append("weight_class = :wc")
+        params["wc"] = weight_class
+    if active_only:
+        clauses.append("(is_active IS NULL OR is_active = true)")
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    sql = text(
+        f"SELECT name, weight_class, COALESCE(is_active, true) AS is_active "
+        f"FROM fighters {where} ORDER BY name LIMIT :lim"
+    )
+
+    with engine.connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    fighters = [
+        {
+            "name": row[0],
+            "weight_class": row[1] or "",
+            "is_active": bool(row[2]),
+        }
+        for row in rows
+    ]
     return {"fighters": fighters, "count": len(fighters)}
 
 
 @app.get("/fighter/{fighter_name}")
 async def get_fighter_profile(fighter_name: str):
-    """Get full profile for a specific fighter."""
+    """Get full profile for a specific fighter, including computed intelligence scores."""
     if predictor is None:
         raise HTTPException(status_code=500, detail="Predictor not initialized")
 
@@ -347,37 +393,112 @@ async def get_fighter_profile(fighter_name: str):
             detail=f"No stats found for '{matched_name}'"
         )
 
-    weight = float(raw_stats.get('fighter_weight_lbs', 185))
+    weight = float(raw_stats.get('fighter_weight_lbs', 185) or 185)
 
     stats = {
         # Record
-        'wins_total': float(raw_stats.get('fighter_w', 0)),
-        'losses_total': float(raw_stats.get('fighter_l', 0)),
-        'draw': float(raw_stats.get('fighter_d', 0)),
+        'wins_total': float(raw_stats.get('fighter_w', 0) or 0),
+        'losses_total': float(raw_stats.get('fighter_l', 0) or 0),
+        'draw': float(raw_stats.get('fighter_d', 0) or 0),
 
         # Physical
-        'age': float(raw_stats.get('age', 0)),
-        'height': float(raw_stats.get('fighter_height_cm', 0)),
-        'reach': float(raw_stats.get('fighter_reach_cm', 0)),
+        'age': float(raw_stats.get('age', 0) or 0),
+        'height': float(raw_stats.get('fighter_height_cm', 0) or 0),
+        'reach': float(raw_stats.get('fighter_reach_cm', 0) or 0),
         'weight': weight,
         'weight_class': determine_weight_class(weight),
 
         # Striking
-        'SLpM_total': float(raw_stats.get('fighter_SlpM', 0)),
-        'sig_str_acc_total': float(raw_stats.get('fighter_Str_Acc', 0)) * 100,
-        'sig_str_def_total': float(raw_stats.get('fighter_Str_Def', 0)) * 100,
-        'total_knockdowns': float(raw_stats.get('knockdowns', 0)),
+        'SLpM_total': float(raw_stats.get('fighter_SlpM', 0) or 0),
+        'sig_str_acc_total': float(raw_stats.get('fighter_Str_Acc', 0) or 0) * 100,
+        'sig_str_def_total': float(raw_stats.get('fighter_Str_Def', 0) or 0) * 100,
+        'total_knockdowns': float(raw_stats.get('knockdowns', 0) or 0),
 
         # Grappling
-        'td_avg_total': float(raw_stats.get('fighter_TD_Avg', 0)),
-        'td_acc_total': float(raw_stats.get('fighter_TD_Acc', 0)) * 100,
-        'td_def_total': float(raw_stats.get('fighter_TD_Def', 0)) * 100,
-        'sub_avg_total': float(raw_stats.get('fighter_Sub_Avg', 0)),
+        'td_avg_total': float(raw_stats.get('fighter_TD_Avg', 0) or 0),
+        'td_acc_total': float(raw_stats.get('fighter_TD_Acc', 0) or 0) * 100,
+        'td_def_total': float(raw_stats.get('fighter_TD_Def', 0) or 0) * 100,
+        'sub_avg_total': float(raw_stats.get('fighter_Sub_Avg', 0) or 0),
     }
 
+    # ── Intelligence scores ────────────────────────────────────────────────────
+    # Read stored values from fighters table; fall back to on-the-fly computation
+    # when columns are NULL (expected in v1 before batch scoring runs).
+
+    stored = None
+    try:
+        if engine is not None:
+            with engine.connect() as conn:
+                stored = conn.execute(
+                    text(
+                        "SELECT style, is_active, aura_score, chaos_contribution, "
+                        "mirage_meter, composite_score "
+                        "FROM fighters WHERE LOWER(name) = LOWER(:name)"
+                    ),
+                    {"name": matched_name},
+                ).fetchone()
+    except Exception:
+        pass  # never block profile on a DB hiccup
+
+    # Numeric building blocks for on-the-fly computation
+    wins = float(raw_stats.get('fighter_w', 0) or 0)
+    losses = float(raw_stats.get('fighter_l', 0) or 0)
+    total_fights = wins + losses or 1
+    win_rate = wins / total_fights
+    slpm = float(raw_stats.get('fighter_SlpM', 0) or 0)
+    str_acc = float(raw_stats.get('fighter_Str_Acc', 0) or 0)   # 0–1
+    str_def = float(raw_stats.get('fighter_Str_Def', 0) or 0)   # 0–1
+    td_avg = float(raw_stats.get('fighter_TD_Avg', 0) or 0)
+    sub_avg = float(raw_stats.get('fighter_Sub_Avg', 0) or 0)
+
+    # Style
+    style_val = (stored.style if stored and stored.style else None)
+    if not style_val:
+        style_val = classify_style({
+            'slpm': slpm, 'str_acc': str_acc, 'str_def': str_def,
+            'td_avg': td_avg, 'sub_avg': sub_avg,
+        })
+
+    # is_active
+    is_active = bool(stored.is_active) if stored and stored.is_active is not None else True
+
+    # Aura score (0–100): proxy for public hype level
+    finish_proxy = min(1.0, (slpm / 6.0) * 0.5 + (td_avg / 5.0) * 0.5)
+    aura_score = float(stored.aura_score) if stored and stored.aura_score is not None else round(
+        min(100.0, win_rate * 40.0 + finish_proxy * 35.0 + min(total_fights, 20) / 20.0 * 25.0), 1
+    )
+
+    # Composite score (0–100): overall model-quality rating
+    composite_score = float(stored.composite_score) if stored and stored.composite_score is not None else round(
+        min(100.0, max(0.0, (win_rate * 40.0 + str_acc * 30.0 + str_def * 30.0) * 100.0)), 1
+    )
+
+    # Chaos contribution (0–100): how much this fighter raises fight volatility
+    slpm_norm = min(1.0, slpm / 7.0)
+    chin_risk = max(0.0, 1.0 - str_def)  # low defense = high chin risk
+    chaos_contribution = float(stored.chaos_contribution) if stored and stored.chaos_contribution is not None else round(
+        min(100.0, (slpm_norm * 0.5 + chin_risk * 0.5) * 100.0), 1
+    )
+
+    # Mirage Meter (0–100): resume inflation proxy
+    # High win rate + low defensive stats → potential mirage
+    mirage_meter = float(stored.mirage_meter) if stored and stored.mirage_meter is not None else round(
+        min(100.0, max(0.0, (win_rate - 0.65) * 200.0)) if win_rate > 0.65 and str_def < 0.55 else 0.0, 1
+    )
+
+    scores_are_stored = stored and stored.aura_score is not None
     return {
         "name": matched_name,
-        "stats": convert_numpy(stats)
+        "stats": convert_numpy(stats),
+        "intelligence": {
+            "style": style_val,
+            "is_active": is_active,
+            "aura_score": aura_score,
+            "composite_score": composite_score,
+            "chaos_contribution": chaos_contribution,
+            "mirage_meter": mirage_meter,
+            "scores_source": "computed" if scores_are_stored else "heuristic",
+        },
     }
 
 
@@ -428,6 +549,56 @@ async def get_fighter_history(fighter_name: str):
         })
 
     return {"name": fighter_name, "fights": history, "count": len(history)}
+
+
+@app.get("/events/{event_id}/card-predictions")
+async def get_card_predictions(event_id: int):
+    """
+    Run POST /predict/simple for every fight on an event card.
+
+    Used by the Dashboard for the Upset Watch feed and card-level previews.
+    Fighter name mismatches (events.json name != DB name) are skipped
+    gracefully — only fights where both names resolve are included.
+
+    Returns:
+        {event_id, predictions: [{fighter1, fighter2, winner, confidence,
+                                   prob_fighter1, prob_fighter2, is_close}]}
+    where is_close = abs(prob_f1 - prob_f2) < 0.15  (model near-coinflip).
+    """
+    if predictor is None:
+        raise HTTPException(status_code=500, detail="Predictor not initialized")
+
+    event = events_by_id.get(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail=f"Event ID {event_id} not found")
+
+    predictions = []
+    for fight in event.get("fights", []):
+        f1 = fight.get("r_fighter") or fight.get("fighter1", "")
+        f2 = fight.get("b_fighter") or fight.get("fighter2", "")
+        if not f1 or not f2 or f1 == "TBA" or f2 == "TBA":
+            continue
+        try:
+            result = predictor.predict_fight(f1, f2, verbose=False)
+            if result is None:
+                continue
+            prob_f1 = float(result["prob_fighter1"])
+            prob_f2 = float(result["prob_fighter2"])
+            predictions.append({
+                "fight_id": fight.get("fight_id"),
+                "fighter1": result["fighter1"],
+                "fighter2": result["fighter2"],
+                "winner": result["winner"],
+                "confidence": float(result["confidence"]),
+                "prob_fighter1": prob_f1,
+                "prob_fighter2": prob_f2,
+                # is_close: model within 15% either way → Upset Watch candidate
+                "is_close": abs(prob_f1 - prob_f2) < 0.15,
+            })
+        except Exception:
+            continue  # skip unresolvable fighter names silently
+
+    return {"event_id": event_id, "predictions": predictions}
 
 
 @app.post("/predict/simple")
