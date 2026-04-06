@@ -2,8 +2,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { vi } from 'vitest';
 import AnalystMode from '../components/picks/AnalystMode';
 
-const mockRequest = vi.fn();
-vi.mock('../api/api', () => ({ default: { request: mockRequest } }));
+vi.mock('../api/api', () => ({
+  default: {
+    request: vi.fn(),
+    getFighterHistory: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+import api from '../api/api';
 
 const f1 = { name: 'Islam Makhachev', stats: {} };
 const f2 = { name: 'Charles Oliveira', stats: {} };
@@ -33,9 +39,9 @@ const mockPrediction = {
 
 describe('AnalystMode — no secondary API call', () => {
   it('does not call /detailed-stats', () => {
-    mockRequest.mockClear();
+    api.request.mockClear();
     render(<AnalystMode fighter1={f1} fighter2={f2} prediction={mockPrediction} />);
-    expect(mockRequest).not.toHaveBeenCalled();
+    expect(api.request).not.toHaveBeenCalled();
   });
 });
 
