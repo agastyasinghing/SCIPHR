@@ -1,5 +1,5 @@
 # SCIPHR — Status
-**Last Updated:** April 2026 | **Current Phase:** Phase 4 — Frontend Wiring
+**Last Updated:** April 2026 | **Current Phase:** Phase 6 — Deploy
 
 ---
 
@@ -12,7 +12,7 @@
 | Phase 2 — Intelligence Engine | ✅ Complete | All 9 modules implemented; upset_alert, sharp_money, cinematic_title done (44/44 tests) |
 | Phase 3 — API Layer | ✅ Complete | Intelligence wired, /health, /events, Sentry |
 | Phase 4 — Frontend Wiring | ✅ Complete | api.js wired, badges, intel tab, dashboard events, scorecard shell |
-| Phase 5 — Claude + Poster | 🔴 Not Started | AI analysis + poster |
+| Phase 5 — Claude + Poster | ✅ Complete | AI analysis wired (template), Fight DNA RadarChart, 429 handling |
 | Phase 6 — Deploy | 🔴 Not Started | Vercel + Railway + Supabase |
 
 ---
@@ -22,9 +22,9 @@
 
 **What is broken:** Nothing critical.
 
-**What is fake:** HistoricalScorecard shows empty state (predictions_log empty at launch, no seeding yet — TODO-10). News ticker is hardcoded placeholder text (TODO-15 documents the schema).
+**What is fake:** HistoricalScorecard shows empty state (predictions_log empty at launch, no seeding yet — TODO-10). News ticker is hardcoded placeholder text (TODO-15 documents the schema). AI analysis uses template output (Claude SDK not wired — see TODO-19).
 
-**What is missing:** Claude analysis wiring (Phase 5). AI poster Phase 5. Scorecard seeding (TODO-10). Card Temperature requires `card_temperature` field in events.json (operator must populate manually — see TODO-15). Scorecard breakdown stats (Gaps 28-31, deferred to post-launch in TODO-15).
+**What is missing:** Scorecard seeding (TODO-10). Card Temperature requires `card_temperature` field in events.json (operator must populate manually — see TODO-15). Scorecard breakdown stats (Gaps 28-31, deferred to post-launch in TODO-15). Live Claude API call in ai_analyst.py (TODO-19).
 
 ---
 
@@ -35,14 +35,14 @@
 ---
 
 ## In Progress
-Phase 5 — Claude + Poster (next up).
+Phase 6 — Deploy (next up).
 
 ---
 
 ## Next 3 Tasks
-1. Start Phase 5: wire Claude analysis async call in AnalystMode (POST /generate-ai-analysis after prediction renders)
-2. Wire AI poster generation flow (already built in FightPoster — verify rate-limit error handling is correct)
-3. Run TODO-10 seeding session: add winner_actual population tool, seed predictions_log with historical fights
+1. Start Phase 6: Railway deploy (backend), Vercel deploy (frontend), Supabase production DB
+2. Run TODO-10 seeding session: add winner_actual column, seed predictions_log with historical fights for scorecard
+3. Fix /health response field names (TODO-12) before deploy — rename db→db_connected, model→model_loaded, add version
 
 ## Phase 4 PRD Audit — Gaps Fixed (April 2026)
 
