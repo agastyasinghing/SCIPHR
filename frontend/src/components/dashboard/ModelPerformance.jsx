@@ -4,127 +4,42 @@ import './ModelPerformance.css';
 
 /**
  * Model Performance Component
- * Shows accuracy metrics for different prediction models
+ * Shows accuracy metrics for the SCIPHR XGBoost model.
+ * Static values until /historical-scorecard is seeded (TODO-10).
  */
 const ModelPerformance = () => {
-  const models = [
-    {
-      id: 'quality',
-      name: 'Quality-1',
-      icon: '🏆',
-      accuracy: 85.2,
-      tier: 'ELITE ONLY',
-      color: 'yellow',
-      description: 'Premium accuracy model focusing on highest win rate',
-      predictions: 247,
-    },
-    {
-      id: 'balanced',
-      name: 'Balanced-1',
-      icon: '⭐',
-      accuracy: 78.4,
-      tier: 'ELITE ONLY',
-      color: 'cyan',
-      description: 'Balanced approach for consistent predictions',
-      predictions: 523,
-    },
-    {
-      id: 'volume',
-      name: 'Volume-1',
-      icon: '⚡',
-      accuracy: 64.8,
-      tier: 'ELITE & PRO',
-      color: 'gray',
-      description: 'Maximum coverage across all fights',
-      predictions: 1247,
-    },
+  const stats = [
+    { label: 'Test Accuracy', value: '85.7%', note: 'held-out test set' },
+    { label: 'Training Fights', value: '8,231', note: 'historical UFC bouts' },
+    { label: 'Features', value: '5,401', note: 'per-fight feature vector' },
+    { label: 'Algorithm', value: 'XGBoost', note: 'gradient boosted trees' },
   ];
-  
+
   return (
     <div className="model-performance-section">
-      {/* Performance Chart Placeholder */}
       <Card variant="glass" className="performance-chart-card">
         <div className="chart-header">
           <div className="chart-title">
-            <h4>12-Month Performance Trend</h4>
-            <p>Based on 1,247 fight predictions with trailing average</p>
+            <h4>SCIPHR Model v1</h4>
+            <p>XGBoost classifier trained on 8,231 UFC fights</p>
           </div>
-          <select className="time-range-select">
-            <option value="12">12-month</option>
-            <option value="6">6-month</option>
-            <option value="3">3-month</option>
-          </select>
         </div>
-        
-        {/* Simplified Chart Visualization */}
-        <div className="chart-visualization">
-          <div className="chart-legend">
-            <div className="legend-item quality">
-              <span className="legend-dot"></span>
-              <span>Quality</span>
+
+        <div className="model-stats-grid">
+          {stats.map((s) => (
+            <div key={s.label} className="model-stat-card">
+              <div className="model-stat-value">{s.value}</div>
+              <div className="model-stat-label">{s.label}</div>
+              <div className="model-stat-note">{s.note}</div>
             </div>
-            <div className="legend-item balanced">
-              <span className="legend-dot"></span>
-              <span>Balanced</span>
-            </div>
-            <div className="legend-item volume">
-              <span className="legend-dot"></span>
-              <span>Volume</span>
-            </div>
-          </div>
-          
-          {/* Mock Chart Lines */}
-          <div className="chart-area">
-            <div className="chart-line quality-line"></div>
-            <div className="chart-line balanced-line"></div>
-            <div className="chart-line volume-line"></div>
-            <div className="chart-placeholder">
-              <p>📊 Interactive chart coming soon</p>
-              <p className="chart-note">Will show accuracy trends over time</p>
-            </div>
-          </div>
+          ))}
+        </div>
+
+        <div className="chart-placeholder">
+          <p>Live accuracy tracking enabled after fight week</p>
+          <p className="chart-note">Historical scorecard records every pick</p>
         </div>
       </Card>
-      
-      {/* Model Cards */}
-      <div className="models-grid">
-        {models.map((model) => (
-          <Card 
-            key={model.id}
-            variant="glass"
-            hover={true}
-            className={`model-card model-${model.color}`}
-          >
-            <div className="model-header">
-              <span className="model-icon">{model.icon}</span>
-              <div className="model-info">
-                <h4 className="model-name">{model.name}</h4>
-                <span className="model-tier">{model.tier}</span>
-              </div>
-            </div>
-            
-            <div className="model-accuracy">
-              <div className="accuracy-value">{model.accuracy}%</div>
-              <div className="accuracy-label">AVERAGE ACCURACY</div>
-            </div>
-            
-            <div className="model-description">
-              {model.description}
-            </div>
-            
-            <div className="model-stats">
-              <div className="stat-item">
-                <span className="stat-value">{model.predictions}</span>
-                <span className="stat-label">Predictions</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-value">12mo</span>
-                <span className="stat-label">Period</span>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
     </div>
   );
 };

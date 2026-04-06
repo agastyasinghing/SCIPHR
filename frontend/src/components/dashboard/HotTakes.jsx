@@ -1,48 +1,15 @@
 import React from 'react';
 import Card from '../shared/Card';
+import hotTakesData from '../../data/hot-takes.json';
 import './HotTakes.css';
 
 /**
  * Hot Takes Component
- * Shows fights where SCIPHR disagrees significantly with Vegas odds
+ * Shows fights where SCIPHR disagrees significantly with Vegas odds.
+ * Data is curated editorially each fight week in src/data/hot-takes.json.
  */
 const HotTakes = () => {
-  // Mock data - we'll replace with real data later
-  const hotTakes = [
-    {
-      id: 1,
-      fighter1: 'Charles Oliveira',
-      fighter2: 'Islam Makhachev',
-      scipherPick: 'Charles Oliveira',
-      scipherConfidence: 72,
-      vegasOdds: 28,
-      difference: 44,
-      event: 'UFC 294',
-      reasoning: 'Model sees massive value - Oliveira\'s submission game underrated',
-    },
-    {
-      id: 2,
-      fighter1: 'Sean O\'Malley',
-      fighter2: 'Merab Dvalishvili',
-      scipherPick: 'Merab Dvalishvili',
-      scipherConfidence: 68,
-      vegasOdds: 35,
-      difference: 33,
-      event: 'UFC 306',
-      reasoning: 'Wrestling advantage heavily undervalued by bookmakers',
-    },
-    {
-      id: 3,
-      fighter1: 'Alexandre Pantoja',
-      fighter2: 'Kai Kara-France',
-      scipherPick: 'Kai Kara-France',
-      scipherConfidence: 65,
-      vegasOdds: 40,
-      difference: 25,
-      event: 'UFC Fight Night',
-      reasoning: 'Striking differential and recent form trending upward',
-    },
-  ];
+  const hotTakes = hotTakesData;
   
   return (
     <div className="hot-takes-section">
