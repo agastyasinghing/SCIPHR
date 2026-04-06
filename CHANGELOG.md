@@ -2,6 +2,21 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.13.0] - 2026-04-05
+
+### Added
+- `ai_analyst.py`: `intelligence_signals` parameter on `generate_fight_analysis()` and `_generate_template_analysis()` — chaos score, perception gap magnitude, narrative risk, and value signal now inform key factors, betting advice, and risk bullets
+- `ai_analyst.py`: Fighter style (via `classify_style()`) and KO rate proxy (`total_knockdowns / total_fights`) computed and used in the Claude prompt (`_build_prompt`) ready for TODO-19 wiring
+- `gemini_service.py`: `aspect_ratio` parameter on `generate_ai_poster()` — `"1:1"` (standard, default) or `"9:16"` (Instagram Story); was previously hardcoded to `"9:16"`
+- `main.py`: `AIAnalysisRequest.intelligence_signals: Optional[dict]` — frontend passes full `IntelligenceResult.model_dump()` with each analysis request
+- `main.py`: `AIPosterRequest.aspect_ratio: Optional[str]` — caller can select standard or Instagram Story poster format
+- `frontend/src/api/api.js`: `generateAIAnalysis()` includes `intelligence_signals: predictionData.intelligence` in request body
+- `AnalystMode.jsx` + `AnalystMode.css`: CSS spinner replaces plain "Analyzing..." text in AI Analysis loading state
+- `TODOS.md`: TODO-21 — $10 Google Cloud cost alert for Imagen poster generation (manual deploy step, required before public launch)
+
+### Fixed
+- `backend/tests/test_p0.py`: `TestAnalystImpliedOdds` direct calls to `_generate_template_analysis()` updated to pass required `intelligence_signals` argument
+
 ## [0.1.12.0] - 2026-04-05
 
 ### Added

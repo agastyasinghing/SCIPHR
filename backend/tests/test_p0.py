@@ -179,7 +179,7 @@ class TestAnalystImpliedOdds:
         from ai_analyst import AIFightAnalyst
 
         analyst = AIFightAnalyst()
-        result = analyst._generate_template_analysis(self._make_data(confidence=0.40))
+        result = analyst._generate_template_analysis(self._make_data(confidence=0.40), {})
 
         assert 'implied_odds' in result, "implied_odds must be present for underdog path"
         assert result['implied_odds'].startswith('+'), \
@@ -192,7 +192,7 @@ class TestAnalystImpliedOdds:
         from ai_analyst import AIFightAnalyst
 
         analyst = AIFightAnalyst()
-        result = analyst._generate_template_analysis(self._make_data(confidence=0.72))
+        result = analyst._generate_template_analysis(self._make_data(confidence=0.72), {})
 
         assert 'implied_odds' in result, "implied_odds must be present for favorite path"
         assert result['implied_odds'].startswith('-'), \
