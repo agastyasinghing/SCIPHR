@@ -156,7 +156,14 @@ const FightPoster = ({
               {/* Header */}
               <div className="poster-header">
                 <div className="poster-logo">SCIPHR</div>
-                <div className="poster-event-title">FIGHT NIGHT</div>
+                <div className="poster-event-title">
+                  {prediction?.intelligence?.cinematic_title?.title || 'FIGHT NIGHT'}
+                </div>
+                {prediction?.intelligence?.cinematic_title?.subtitle && (
+                  <div className="poster-event-subtitle">
+                    {prediction.intelligence.cinematic_title.subtitle}
+                  </div>
+                )}
               </div>
               
               {/* Fighters */}
@@ -260,6 +267,21 @@ const FightPoster = ({
                 </div>
               )}
               
+              {/* Intelligence Badges */}
+              {prediction?.intelligence?.badges?.length > 0 && (
+                <div className="poster-badges">
+                  {prediction.intelligence.badges.map((badge) => (
+                    <span
+                      key={`${badge.key}-${badge.fighter}`}
+                      className={`poster-badge poster-badge--${badge.color}`}
+                      title={badge.reason}
+                    >
+                      {badge.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {/* Footer */}
               <div className="poster-footer">
                 <div className="poster-location">

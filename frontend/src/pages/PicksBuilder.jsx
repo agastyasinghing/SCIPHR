@@ -15,6 +15,7 @@ const PicksBuilder = () => {
   const [fighter2, setFighter2] = useState(null);
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [selectingFighter, setSelectingFighter] = useState(null); // 1 or 2
   
@@ -38,22 +39,27 @@ const PicksBuilder = () => {
   
   const handleGeneratePrediction = async () => {
     if (!fighter1 || !fighter2) return;
-    
+
     setLoading(true);
+    setError(null);
     try {
       const data = await api.predictFight(fighter1.name, fighter2.name);
       setPrediction(data);
-    } catch (error) {
-      console.error('Prediction failed:', error);
+    } catch (err) {
+      const msg = err?.message?.includes('400')
+        ? 'Cannot predict a fighter against themselves.'
+        : 'Prediction failed. Check your connection and try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
-  
+
   const handleReset = () => {
     setFighter1(null);
     setFighter2(null);
     setPrediction(null);
+    setError(null);
   };
   
   return (
@@ -93,6 +99,13 @@ const PicksBuilder = () => {
           <button className="reset-btn" onClick={handleReset}>
             <span>↻</span> Start Over
           </button>
+        )}
+
+        {/* Prediction Error */}
+        {error && (
+          <div className="prediction-error" role="alert">
+            {error}
+          </div>
         )}
         
         {/* Content */}
