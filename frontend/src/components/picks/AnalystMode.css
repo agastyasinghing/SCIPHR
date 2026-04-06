@@ -288,3 +288,27 @@
 @media (max-width: 600px) {
   .recent-form-grid { grid-template-columns: 1fr; }
 }
+
+/* AI Analysis loading spinner */
+.ai-analysis-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+}
+
+.ai-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: ai-spin 0.75s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}

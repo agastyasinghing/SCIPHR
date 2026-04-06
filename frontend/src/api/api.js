@@ -146,6 +146,9 @@ class APIService {
         confidence: predictionData.confidence,
         fighter1_stats: predictionData.fighter1_stats ?? {},
         fighter2_stats: predictionData.fighter2_stats ?? {},
+        // Pass the full intelligence bundle so the analyst can include
+        // chaos score, perception gap, narrative risk, and value signal.
+        intelligence_signals: predictionData.intelligence ?? null,
       }),
     });
   }

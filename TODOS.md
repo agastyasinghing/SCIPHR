@@ -607,3 +607,25 @@ AI Analysis panel. Pattern: `FightPoster.jsx` lines 28, 91 (aiGenerationsLeft).
 **Depends on / blocked by:** Phase 5 AI analysis wiring (TODO-20 builds on top of it).
 Consider doing this at the same time as TODO-19 (Claude wiring) since that's when
 per-call cost makes quota visibility matter most.
+
+
+---
+
+## TODO-21 — Set up $10 Google Cloud cost alert for Imagen poster generation
+
+**What:** Create a Google Cloud Budget alert that fires when Vertex AI spend
+reaches $10 in a calendar month. Route the alert to email.
+
+**Why:** AI poster generation costs $0.06/image via Imagen 4 Ultra. With rate
+limiting at 3/hr/IP this is low risk for a single user, but at public launch
+scale an abuse scenario (VPN rotation) could rack up cost undetected.
+PRD §10.12 explicitly requires this alert before deploy.
+
+**How (manual steps — not automatable from code):**
+1. Google Cloud Console → Billing → Budgets & alerts
+2. Create budget: scope to project, all services, $10/month threshold
+3. Add email alert at 50% ($5) and 100% ($10)
+4. Optionally: add a Pub/Sub notification to auto-disable the API at 100%
+
+**Depends on / blocked by:** Nothing. Can be done any time before Phase 6 deploy.
+Must be done BEFORE public launch announcement.
