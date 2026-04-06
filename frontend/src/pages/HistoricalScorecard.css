@@ -1,0 +1,120 @@
+.scorecard-page {
+  min-height: 100vh;
+  padding: 2rem 0;
+}
+
+.scorecard-loading,
+.scorecard-error,
+.scorecard-empty {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.scorecard-error {
+  color: #ef4444;
+}
+
+.scorecard-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.scorecard-empty h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary, #fff);
+}
+
+.scorecard-cta {
+  display: inline-block;
+  margin-top: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--accent-primary, #ef4444);
+  color: #fff;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.scorecard-header {
+  margin-bottom: 2rem;
+}
+
+.scorecard-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+}
+
+.scorecard-subtitle {
+  color: var(--text-secondary, #9ca3af);
+  margin-top: 0.25rem;
+}
+
+.scorecard-stats {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.scorecard-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.scorecard-stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+}
+
+.scorecard-stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.scorecard-table-wrapper {
+  overflow-x: auto;
+}
+
+.scorecard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.scorecard-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #9ca3af);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scorecard-table td {
+  padding: 0.75rem 1rem;
+  color: var(--text-primary, #fff);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.row-correct td { background: rgba(16, 185, 129, 0.05); }
+.row-wrong  td { background: rgba(239, 68, 68, 0.05); }
+
+.result-correct { color: #10b981; font-weight: 600; }
+.result-wrong   { color: #ef4444; font-weight: 600; }
+.result-pending { color: #9ca3af; }
+
+.signal-badge {
+  padding: 0.2rem 0.5rem;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
