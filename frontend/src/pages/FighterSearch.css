@@ -316,3 +316,13 @@
     grid-template-columns: 1fr;
   }
 }
+/* ── Weight class tag + inactive tag on fighter cards (Gaps 21/27) ───────── */
+.fighter-meta-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 4px; }
+.fighter-weight-class-tag {
+  font-size: 0.68rem; font-weight: 600; padding: 0.15rem 0.45rem;
+  border-radius: 4px; border: 1px solid;
+}
+.fighter-inactive-tag {
+  font-size: 0.65rem; color: #6B7280; border: 1px solid #374151;
+  padding: 0.1rem 0.4rem; border-radius: 4px;
+}

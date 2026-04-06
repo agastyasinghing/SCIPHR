@@ -19,18 +19,20 @@ const FighterSearchModal = ({ onClose, onSelect, excludeFighter }) => {
   }, []);
   
   useEffect(() => {
-    // Filter fighters based on search
+    // fighters is now [{name, weight_class, is_active}]
+    const excludeName = excludeFighter?.name ?? '';
+    const filter = (f) => f.name !== excludeName;
+
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      const filtered = fighters.filter(f => 
-        f.toLowerCase().includes(query) && f !== excludeFighter?.name
+      setFilteredFighters(
+        fighters.filter(f => f.name.toLowerCase().includes(query) && filter(f)).slice(0, 50)
       );
-      setFilteredFighters(filtered.slice(0, 50)); // Limit results
     } else {
-      setFilteredFighters(fighters.filter(f => f !== excludeFighter?.name).slice(0, 50));
+      setFilteredFighters(fighters.filter(filter).slice(0, 50));
     }
   }, [searchQuery, fighters, excludeFighter]);
-  
+
   const loadFighters = async () => {
     setLoading(true);
     try {
@@ -43,10 +45,10 @@ const FighterSearchModal = ({ onClose, onSelect, excludeFighter }) => {
       setLoading(false);
     }
   };
-  
+
   const handleSelectFighter = async (fighterName) => {
     setSelectedFighter(fighterName);
-    
+
     // Load fighter stats
     try {
       const result = await api.getFighterProfile(fighterName);
@@ -96,13 +98,13 @@ const FighterSearchModal = ({ onClose, onSelect, excludeFighter }) => {
                 {filteredFighters.map((fighter, idx) => (
                   <div
                     key={idx}
-                    className={`fighter-item ${selectedFighter === fighter ? 'selected' : ''}`}
-                    onClick={() => handleSelectFighter(fighter)}
+                    className={`fighter-item ${selectedFighter === fighter.name ? 'selected' : ''}`}
+                    onClick={() => handleSelectFighter(fighter.name)}
                   >
                     <div className="fighter-avatar-small">
-                      {fighter.charAt(0)}
+                      {fighter.name.charAt(0)}
                     </div>
-                    <div className="fighter-name-small">{fighter}</div>
+                    <div className="fighter-name-small">{fighter.name}</div>
                     <div className="fighter-arrow">→</div>
                   </div>
                 ))}

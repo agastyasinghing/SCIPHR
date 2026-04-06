@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 import FighterSearchModal from '../components/picks/FighterSearchModal';
 import FightPoster from '../components/picks/FightPoster';
@@ -7,9 +8,12 @@ import './PicksBuilder.css';
 
 /**
  * Picks Builder Page
- * Main page for creating fight predictions with poster/analyst modes
+ * Supports pre-loading fighters via URL params:
+ *   /picks?fighter1=Fighter+Name
+ *   /picks?fighter1=Fighter+A&fighter2=Fighter+B
  */
 const PicksBuilder = () => {
+  const [searchParams] = useSearchParams();
   const [mode, setMode] = useState('poster'); // 'poster' or 'analyst'
   const [fighter1, setFighter1] = useState(null);
   const [fighter2, setFighter2] = useState(null);
@@ -18,6 +22,23 @@ const PicksBuilder = () => {
   const [error, setError] = useState(null);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [selectingFighter, setSelectingFighter] = useState(null); // 1 or 2
+
+  // Pre-load fighters from URL params (?fighter1=Name&fighter2=Name)
+  useEffect(() => {
+    const f1Name = searchParams.get('fighter1');
+    const f2Name = searchParams.get('fighter2');
+    const load = async (name, setter) => {
+      if (!name) return;
+      try {
+        const result = await api.getFighterProfile(name);
+        setter(result);
+      } catch {
+        // Silently skip unresolvable names — user can select manually
+      }
+    };
+    load(f1Name, setFighter1);
+    load(f2Name, setFighter2);
+  }, []); // run once on mount only
   
   const handleSelectFighter = (position) => {
     setSelectingFighter(position);

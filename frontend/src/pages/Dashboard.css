@@ -140,3 +140,25 @@
     font-size: 0.9375rem;
   }
 }
+
+/* ── Upset Watch feed (Gap 18) ───────────────────────────────────────────── */
+.upset-watch-empty { color: rgba(255,255,255,0.4); font-size: 0.875rem; padding: 0.5rem 0; }
+.upset-watch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.upset-watch-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(249,115,22,0.3); border-radius: 12px; padding: 1rem; }
+.upset-watch-header { margin-bottom: 0.75rem; }
+.upset-watch-badge { font-size: 0.75rem; font-weight: 700; color: #F97316; }
+.upset-watch-fighters { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+.uw-fighter { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.uw-fighter--right { text-align: right; align-items: flex-end; }
+.uw-name { font-size: 0.875rem; font-weight: 600; color: rgba(255,255,255,0.9); }
+.uw-pct { font-size: 0.78rem; font-weight: 700; color: #F97316; }
+.uw-vs { font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.3); }
+.uw-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-bottom: 0.5rem; }
+.uw-bar-fill { height: 100%; }
+.uw-bar-f1 { background: rgba(239,68,68,0.6); }
+.uw-bar-f2 { background: rgba(59,130,246,0.6); }
+.uw-note { font-size: 0.72rem; color: rgba(255,255,255,0.45); }
+
+/* ── Scorecard link in Model Performance subtitle (Gap 20) ───────────────── */
+.scorecard-link { color: #60A5FA; text-decoration: none; }
+.scorecard-link:hover { text-decoration: underline; }

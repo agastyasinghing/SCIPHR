@@ -4,9 +4,10 @@ import hotTakesData from '../../data/hot-takes.json';
 import './HotTakes.css';
 
 /**
- * Hot Takes Component
- * Shows fights where SCIPHR disagrees significantly with Vegas odds.
- * Data is curated editorially each fight week in src/data/hot-takes.json.
+ * Editor's Picks Component
+ * Manually curated fight picks from the SCIPHR editorial team.
+ * Data lives in src/data/hot-takes.json — updated each fight week by the operator.
+ * NOT derived from live model predictions.  Label explicitly as editorial content.
  */
 const HotTakes = () => {
   const hotTakes = hotTakesData;

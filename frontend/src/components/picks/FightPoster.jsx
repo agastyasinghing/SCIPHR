@@ -267,7 +267,55 @@ const FightPoster = ({
                 </div>
               )}
               
-              {/* Intelligence Badges */}
+              {/* Compact intelligence signals */}
+              {prediction?.intelligence && (() => {
+                const intel = prediction.intelligence;
+                const pg    = intel.perception_gap;
+                const chaos = intel.chaos;
+                const vb    = intel.value_bet;
+
+                const signals = [];
+
+                // Perception Gap
+                if (pg?.available) {
+                  const maxGap = Math.abs(pg.gap_f1) >= Math.abs(pg.gap_f2) ? pg.gap_f1 : pg.gap_f2;
+                  const dir    = Math.abs(pg.gap_f1) >= Math.abs(pg.gap_f2) ? pg.direction_f1 : pg.direction_f2;
+                  if (dir !== 'ALIGNED') {
+                    const color = dir === 'OVERHYPED' ? '#EF4444' : '#10B981';
+                    signals.push(
+                      <span key="pg" className="poster-signal" style={{ color, borderColor: `${color}55` }}>
+                        Perception Gap: {maxGap >= 0 ? '+' : ''}{(maxGap * 100).toFixed(0)}pts ({dir})
+                      </span>
+                    );
+                  }
+                }
+
+                // Chaos Score
+                if (chaos?.available) {
+                  const tierColor = { LOW: '#10B981', MIXED: '#F59E0B', HIGH: '#EF4444', EXTREME: '#7C3AED' }[chaos.tier] || '#6B7280';
+                  signals.push(
+                    <span key="chaos" className="poster-signal" style={{ color: tierColor, borderColor: `${tierColor}55` }}>
+                      Chaos: {chaos.tier}
+                    </span>
+                  );
+                }
+
+                // Edge Detected
+                if (vb && vb.signal !== 'NO_ODDS' && vb.signal !== 'NO_EDGE') {
+                  const edgeColor = (vb.signal === 'STRONG_EDGE' || vb.signal === 'EDGE_DETECTED') ? '#10B981' : '#F59E0B';
+                  signals.push(
+                    <span key="vb" className="poster-signal" style={{ color: edgeColor, borderColor: `${edgeColor}55` }}>
+                      {vb.signal === 'STRONG_EDGE' ? 'Strong Edge' : vb.signal === 'EDGE_DETECTED' ? 'Edge Detected' : 'Fade Opportunity'}
+                    </span>
+                  );
+                }
+
+                return signals.length > 0 ? (
+                  <div className="poster-signals">{signals}</div>
+                ) : null;
+              })()}
+
+              {/* SCIPHR Badges */}
               {prediction?.intelligence?.badges?.length > 0 && (
                 <div className="poster-badges">
                   {prediction.intelligence.badges.map((badge) => (
