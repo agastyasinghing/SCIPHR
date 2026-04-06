@@ -6,51 +6,42 @@ import { getFighterImage } from '../../utils/imageUtils';
 
 /**
  * Hero Fight Card Component
- * Displays the next main event with fighter matchup, predictions, and value indicators
+ * Displays the next main event. Accepts real event data from Dashboard.jsx.
+ * Falls back to empty state when no event is provided.
  */
-const HeroFightCard = ({ fightData }) => {
+const HeroFightCard = ({ event }) => {
   const [timeUntil, setTimeUntil] = useState('');
+
+  // Shape the event prop into the expected fight structure.
+  // event comes from GET /events/upcoming → events_data[0]
+  const mainCard = event?.fights?.[0] ?? null;
+  const fight = mainCard
+    ? {
+        eventName: event.name ?? 'UFC Event',
+        location: event.location ?? '',
+        date: event.date ? new Date(event.date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        fighter1: { name: mainCard.r_fighter ?? mainCard.fighter1 ?? 'TBA', record: '' },
+        fighter2: { name: mainCard.b_fighter ?? mainCard.fighter2 ?? 'TBA', record: '' },
+        confidence: 'PENDING',
+        dataPoints: null,
+        valueBet: { hasValue: false },
+        analysisUpdated: null,
+      }
+    : null;
   
-  // Mock data if none provided
-  const defaultFight = {
-    eventName: 'UFC 323',
-    location: 'Las Vegas, USA',
-    date: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000), // 12 days from now
-    fighter1: {
-      name: 'Merab Dvalishvili',
-      image: '/fighters/merab.jpg',
-      record: '17-4-0',
-      prediction: 68.3,
-    },
-    fighter2: {
-      name: 'Petr Yan',
-      image: '/fighters/yan.jpg',
-      record: '16-5-0',
-      prediction: 31.7,
-    },
-    confidence: 'MEDIUM-HIGH',
-    dataPoints: 842,
-    valueBet: {
-      hasValue: true,
-      percentage: 15,
-      fighter: 'fighter1',
-    },
-    analysisUpdated: '21h ago',
-  };
-  
-  const fight = fightData || defaultFight;
-  
-  // Calculate countdown
+  // Calculate countdown — must be called unconditionally (Rules of Hooks)
   useEffect(() => {
+    if (!fight) return;
+
     const calculateTimeUntil = () => {
       const now = new Date();
       const diff = fight.date - now;
-      
+
       if (diff <= 0) {
         setTimeUntil('LIVE NOW');
         return;
       }
-      
+
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -62,8 +53,17 @@ const HeroFightCard = ({ fightData }) => {
     const interval = setInterval(calculateTimeUntil, 60000); // Update every minute
     
     return () => clearInterval(interval);
-  }, [fight.date]);
-  
+  }, [fight?.date]);
+
+  // Early return after all hooks
+  if (!fight) {
+    return (
+      <div className="hero-fight-card hero-fight-card--empty">
+        <p>No upcoming events found. Check back soon.</p>
+      </div>
+    );
+  }
+
   // Determine value bet text
   const getValueBetText = () => {
     if (!fight.valueBet.hasValue) return null;
@@ -110,9 +110,9 @@ const HeroFightCard = ({ fightData }) => {
           <div className="fighter fighter-red">
             <div className="fighter-gradient gradient-fighter-red">
               <div className="fighter-image-container">
-                <img 
-                  src={getFighterImage('Merab Dvalishvili', 'Bantamweight')}
-                  alt="Merab Dvalishvili"
+                <img
+                  src={getFighterImage(fight.fighter1.name, '')}
+                  alt={fight.fighter1.name}
                   className="fighter-image"
                 />
                 
@@ -135,9 +135,9 @@ const HeroFightCard = ({ fightData }) => {
           <div className="fighter fighter-blue">
             <div className="fighter-gradient gradient-fighter-blue">
               <div className="fighter-image-container">
-                <img 
-                  src={getFighterImage('Petr Yan', 'Bantamweight')}
-                  alt="Petr Yan"
+                <img
+                  src={getFighterImage(fight.fighter2.name, '')}
+                  alt={fight.fighter2.name}
                   className="fighter-image"
                 />
               </div>
@@ -149,16 +149,17 @@ const HeroFightCard = ({ fightData }) => {
           </div>
         </div>
         
-        {/* Prediction Section */}
+        {/* Prediction Section — only shown when prediction data is available */}
+        {fight.fighter1.prediction != null && (
         <div className="prediction-section">
           <div className="prediction-bar">
-            <div 
+            <div
               className="prediction-fill prediction-fill-red"
               style={{ width: `${fight.fighter1.prediction}%` }}
             >
               <span className="prediction-percentage">{fight.fighter1.prediction.toFixed(1)}%</span>
             </div>
-            <div 
+            <div
               className="prediction-fill prediction-fill-blue"
               style={{ width: `${fight.fighter2.prediction}%` }}
             >
@@ -173,6 +174,7 @@ const HeroFightCard = ({ fightData }) => {
             </span>
           </div>
         </div>
+        )}
         
         {/* Value Bet Indicator (NEW - Our Edge!) */}
         {fight.valueBet.hasValue && (

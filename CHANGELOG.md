@@ -2,6 +2,34 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.10.0] - 2026-04-05
+
+### Added
+- **Phase 4: Frontend Wiring** — complete wiring of React frontend to real backend data
+- `GET /historical-scorecard` endpoint — returns paginated prediction history from `predictions_log`, includes accuracy computation, `correct` flag per row, and pagination echo; max 200 rows per request
+- `api.js`: `generateAIAnalysis()` and `getHistoricalScorecard()` methods; removed dead `getFighterStats()` and stub `getModelPerformance()`
+- **Intelligence tab** in `AnalystMode` — all 11 SCIPHR signals rendered: Chaos Score, Perception Gap, Narrative Trap, False Consensus, Nightmare Matchup, Kill Chain (Win Path), Fight DNA (with per-dimension bars), Line Crack (Value Bet), Dog Teeth (Upset Alert), Sharp Echo, cinematic title
+- **Badges** in `FightPoster` (Simple Mode) — all badge types with color tokens displayed after prediction stamp
+- **Cinematic title** in `FightPoster` header — replaces hardcoded "FIGHT NIGHT"
+- `HistoricalScorecard` page (`/scorecard` route) — empty state CTA when no predictions logged; stats row + table when data exists
+- **vitest test scaffold** — 5 test files, 26 tests across Dashboard, PicksBuilder, FightPoster, AnalystMode, HistoricalScorecard; `@testing-library/react` + jsdom environment
+- `frontend/src/data/hot-takes.json` — curated editorial JSON replaces inline mock array in `HotTakes.jsx`
+- Backend tests for `/historical-scorecard` (6 tests covering empty state, row mapping, correct flag, accuracy, pagination)
+
+### Changed
+- `Dashboard.jsx` — fetches upcoming/past events on mount via `api.js`; passes data as props to `HeroFightCard`, `UpcomingFights`, `EventsTimeline`; shows loading state during fetch and error banner on failure
+- `AnalystMode.jsx` — removed `/detailed-stats` secondary API call (was re-running XGBoost); now reads `fighter1_stats`, `fighter2_stats`, `intelligence` from prediction prop; tabs refactored from 5 repeated buttons to array-driven loop
+- `HeroFightCard.jsx` — fixed Rules of Hooks violation (early return moved after all hooks); prediction bar null-guarded; accepts real event prop
+- `ModelPerformance.jsx` — replaced fake multi-tier cards with real XGBoost model stats (85.7% accuracy, 8,231 fights, 5,401 features)
+- `PicksBuilder.jsx` — prediction errors now shown inline via `role="alert"` div; same-fighter and connection errors have distinct messages
+- Sharp Echo panel now shows all signals (not just `MARKET_ALIGNMENT`); `movement_magnitude` null-guarded
+- `/historical-scorecard` `limit` parameter capped at 200 rows to prevent full-table pulls
+
+### Fixed
+- `HeroFightCard` Rules of Hooks violation — `useEffect` dependency on `fight?.date` used optional chaining; early return moved after all hooks
+- `es-toolkit` upgraded to `^1.45.1` to resolve missing `compat/get.js` required by recharts
+- `movement_magnitude` null guard in Sharp Echo panel (was `NaN` render when null)
+
 ## [0.1.9.1] - 2026-04-05
 
 ### Changed

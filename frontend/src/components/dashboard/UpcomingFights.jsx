@@ -4,68 +4,35 @@ import './UpcomingFights.css';
 
 /**
  * Upcoming Fights Component
- * Grid of popular upcoming fight cards
+ * Accepts events array from Dashboard.jsx (lifted state).
+ * Falls back to empty state when no events are available.
  */
-const UpcomingFights = () => {
-  // Mock data
-  const upcomingFights = [
-    {
-      id: 1,
-      event: 'UFC 323',
-      date: 'Dec 6, 2025',
-      location: 'Las Vegas',
+const UpcomingFights = ({ events = [] }) => {
+  if (events.length === 0) {
+    return (
+      <div className="upcoming-fights-section upcoming-fights-section--empty">
+        <p>No upcoming fights scheduled. Check back fight week.</p>
+      </div>
+    );
+  }
+
+  const upcomingFights = events.map((event) => {
+    const main = event.fights?.[0];
+    return {
+      id: event.id,
+      event: event.name,
+      date: event.date ?? '',
+      location: event.location ?? '',
       mainEvent: {
-        fighter1: 'Merab Dvalishvili',
-        fighter2: 'Petr Yan',
-        prediction1: 68,
-        prediction2: 32,
+        fighter1: main?.r_fighter ?? main?.fighter1 ?? 'TBA',
+        fighter2: main?.b_fighter ?? main?.fighter2 ?? 'TBA',
+        prediction1: null,
+        prediction2: null,
       },
-      image: '/events/ufc323.jpg',
-      isTitle: true,
-    },
-    {
-      id: 2,
-      event: 'UFC Fight Night',
-      date: 'Nov 29, 2025',
-      location: 'Abu Dhabi',
-      mainEvent: {
-        fighter1: 'Robert Whittaker',
-        fighter2: 'Khamzat Chimaev',
-        prediction1: 45,
-        prediction2: 55,
-      },
-      image: '/events/fightnight.jpg',
-      isTitle: false,
-    },
-    {
-      id: 3,
-      event: 'UFC 324',
-      date: 'Dec 13, 2025',
-      location: 'New York',
-      mainEvent: {
-        fighter1: 'Jon Jones',
-        fighter2: 'Tom Aspinall',
-        prediction1: 52,
-        prediction2: 48,
-      },
-      image: '/events/ufc324.jpg',
-      isTitle: true,
-    },
-    {
-      id: 4,
-      event: 'UFC Fight Night',
-      date: 'Dec 20, 2025',
-      location: 'London',
-      mainEvent: {
-        fighter1: 'Leon Edwards',
-        fighter2: 'Shavkat Rakhmonov',
-        prediction1: 58,
-        prediction2: 42,
-      },
-      image: '/events/london.jpg',
-      isTitle: false,
-    },
-  ];
+      image: event.image ?? null,
+      isTitle: event.is_title_fight ?? false,
+    };
+  });
   
   return (
     <div className="upcoming-fights-section">
@@ -108,26 +75,25 @@ const UpcomingFights = () => {
               <div className="main-event">
                 <div className="fighter-row">
                   <span className="fighter-name">{fight.mainEvent.fighter1}</span>
-                  <span className="fighter-prediction">{fight.mainEvent.prediction1}%</span>
+                  {fight.mainEvent.prediction1 != null && (
+                    <span className="fighter-prediction">{fight.mainEvent.prediction1}%</span>
+                  )}
                 </div>
                 <div className="vs-separator">VS</div>
                 <div className="fighter-row">
                   <span className="fighter-name">{fight.mainEvent.fighter2}</span>
-                  <span className="fighter-prediction">{fight.mainEvent.prediction2}%</span>
+                  {fight.mainEvent.prediction2 != null && (
+                    <span className="fighter-prediction">{fight.mainEvent.prediction2}%</span>
+                  )}
                 </div>
               </div>
-              
-              {/* Mini Prediction Bar */}
-              <div className="mini-prediction-bar">
-                <div 
-                  className="mini-bar fighter1-bar"
-                  style={{ width: `${fight.mainEvent.prediction1}%` }}
-                ></div>
-                <div 
-                  className="mini-bar fighter2-bar"
-                  style={{ width: `${fight.mainEvent.prediction2}%` }}
-                ></div>
-              </div>
+
+              {fight.mainEvent.prediction1 != null && (
+                <div className="mini-prediction-bar">
+                  <div className="mini-bar fighter1-bar" style={{ width: `${fight.mainEvent.prediction1}%` }} />
+                  <div className="mini-bar fighter2-bar" style={{ width: `${fight.mainEvent.prediction2}%` }} />
+                </div>
+              )}
             </div>
           </Card>
         ))}

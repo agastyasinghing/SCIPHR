@@ -15,9 +15,6 @@ if (!_envUrl) {
 
 const API_BASE_URL = _envUrl || 'http://localhost:8000';
 
-// TODO (Phase 4): getFighterStats() and getFighterProfile() are duplicates —
-// both call /fighter/:name. Remove getFighterStats() when all components are wired.
-
 class APIService {
   /**
    * Generic fetch wrapper with error handling
@@ -100,14 +97,6 @@ class APIService {
   }
   
   /**
-   * Get fighter details/stats
-   * @param {string} fighterName - Fighter name
-   */
-  async getFighterStats(fighterName) {
-    return this.request(`/fighter/${encodeURIComponent(fighterName)}`);
-  }
-  
-  /**
    * Get upcoming events
    */
   async getUpcomingEvents() {
@@ -124,11 +113,25 @@ class APIService {
   }
   
   /**
-   * Get model performance stats
+   * Generate AI analysis for a fight (async — call after /predict renders)
+   * @param {string} fighter1 - First fighter name
+   * @param {string} fighter2 - Second fighter name
+   * @param {object} predictionData - Full prediction result from predictFight()
    */
-  async getModelPerformance() {
-    // TODO: Implement when backend endpoint is ready
-    return this.request('/model/performance');
+  async generateAIAnalysis(fighter1, fighter2, predictionData) {
+    return this.request('/generate-ai-analysis', {
+      method: 'POST',
+      body: JSON.stringify({ fighter1_name: fighter1, fighter2_name: fighter2, prediction: predictionData }),
+    });
+  }
+
+  /**
+   * Get prediction history (historical scorecard)
+   * @param {number} limit - Max rows to return (default 50)
+   * @param {number} offset - Pagination offset
+   */
+  async getHistoricalScorecard(limit = 50, offset = 0) {
+    return this.request(`/historical-scorecard?limit=${limit}&offset=${offset}`);
   }
 }
 

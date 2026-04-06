@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import FighterSearch from './pages/FighterSearch';
 import FighterProfile from './pages/FighterProfile';
 import PicksBuilder from './pages/PicksBuilder';
+import HistoricalScorecard from './pages/HistoricalScorecard';
 import './styles/global.css';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route path="/fighters" element={<FighterSearch />} />
           <Route path="/fighter/:name" element={<FighterProfile />} />
           <Route path="/picks" element={<PicksBuilder />} />
+          <Route path="/scorecard" element={<HistoricalScorecard />} />
         </Routes>
         <Footer />
       </div>

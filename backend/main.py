@@ -593,6 +593,84 @@ async def predict_fight(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/historical-scorecard")
+async def get_historical_scorecard(limit: int = 50, offset: int = 0):
+    """
+    Return paginated prediction history from predictions_log.
+    actual_winner is NULL until an admin resolves the fight post-event.
+    Returns rows ordered newest-first. Max 200 rows per request.
+    """
+    limit = min(limit, 200)  # cap to prevent full-table pulls
+    try:
+        from db.models import PredictionLog
+        from sqlalchemy import select, func as sqlfunc
+
+        with engine.connect() as conn:
+            total_row = conn.execute(
+                select(sqlfunc.count()).select_from(PredictionLog)
+            ).scalar()
+
+            rows = conn.execute(
+                select(
+                    PredictionLog.id,
+                    PredictionLog.fighter1,
+                    PredictionLog.fighter2,
+                    PredictionLog.winner,
+                    PredictionLog.confidence,
+                    PredictionLog.prob_f1,
+                    PredictionLog.prob_f2,
+                    PredictionLog.actual_winner,
+                    PredictionLog.value_signal,
+                    PredictionLog.edge_pct,
+                    PredictionLog.created_at,
+                )
+                .order_by(PredictionLog.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            ).fetchall()
+
+        predictions = []
+        for row in rows:
+            correct = (
+                row.actual_winner == row.winner
+                if row.actual_winner and row.winner
+                else None  # unresolved
+            )
+            predictions.append({
+                "id": row.id,
+                "fighter1": row.fighter1,
+                "fighter2": row.fighter2,
+                "predicted_winner": row.winner,
+                "confidence": float(row.confidence) if row.confidence else None,
+                "prob_f1": float(row.prob_f1) if row.prob_f1 else None,
+                "prob_f2": float(row.prob_f2) if row.prob_f2 else None,
+                "actual_winner": row.actual_winner,
+                "correct": correct,
+                "value_signal": row.value_signal,
+                "edge_pct": float(row.edge_pct) if row.edge_pct else None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            })
+
+        resolved = [p for p in predictions if p["correct"] is not None]
+        accuracy = (
+            sum(1 for p in resolved if p["correct"]) / len(resolved)
+            if resolved else None
+        )
+
+        return {
+            "predictions": predictions,
+            "total": total_row,
+            "limit": limit,
+            "offset": offset,
+            "accuracy": round(accuracy * 100, 1) if accuracy is not None else None,
+            "resolved_count": len(resolved),
+        }
+
+    except Exception as e:
+        print(f"❌ /historical-scorecard error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class AIPosterRequest(BaseModel):
     fighter1_name: str
     fighter2_name: str

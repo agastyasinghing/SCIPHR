@@ -4,55 +4,34 @@ import './EventsTimeline.css';
 
 /**
  * Events Timeline Component
- * Visual timeline of past and upcoming UFC events
+ * Accepts upcoming and past event arrays from Dashboard.jsx (lifted state).
+ * Falls back to empty state when both arrays are empty.
  */
-const EventsTimeline = () => {
-  // Mock data
-  const events = [
-    {
-      id: 1,
-      name: 'UFC 320',
-      date: 'Nov 8',
-      status: 'past',
-      fighters: ['Jones', 'Miocic'],
-    },
-    {
-      id: 2,
-      name: 'UFC Fight Night',
-      date: 'Nov 15',
-      status: 'past',
-      fighters: ['Aspinall', 'Blaydes'],
-    },
-    {
-      id: 3,
-      name: 'UFC Qatar',
-      date: 'Nov 22',
-      status: 'recent',
-      fighters: ['Tsarukyan', 'Hooker'],
-    },
-    {
-      id: 4,
-      name: 'UFC 323',
-      date: 'Dec 6',
-      status: 'upcoming',
-      fighters: ['Dvalishvili', 'Yan'],
-      isNext: true,
-    },
-    {
-      id: 5,
-      name: 'UFC 324',
-      date: 'Dec 13',
-      status: 'upcoming',
-      fighters: ['Jones', 'Aspinall'],
-    },
-    {
-      id: 6,
-      name: 'UFC Fight Night',
-      date: 'Dec 20',
-      status: 'upcoming',
-      fighters: ['Edwards', 'Rakhmonov'],
-    },
-  ];
+const EventsTimeline = ({ upcoming = [], past = [] }) => {
+  const now = new Date();
+
+  const pastEvents = past.map((e) => ({
+    id: `past-${e.id}`,
+    name: e.name,
+    date: e.date ? new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '',
+    status: 'past',
+    fighters: (e.fights?.[0]
+      ? [e.fights[0].r_fighter?.split(' ').pop(), e.fights[0].b_fighter?.split(' ').pop()]
+      : []).filter(Boolean),
+  }));
+
+  const upcomingEvents = upcoming.map((e, idx) => ({
+    id: `upcoming-${e.id}`,
+    name: e.name,
+    date: e.date ? new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '',
+    status: 'upcoming',
+    isNext: idx === 0,
+    fighters: (e.fights?.[0]
+      ? [e.fights[0].r_fighter?.split(' ').pop(), e.fights[0].b_fighter?.split(' ').pop()]
+      : []).filter(Boolean),
+  }));
+
+  const events = [...pastEvents.slice(-2), ...upcomingEvents.slice(0, 4)];
   
   return (
     <div className="events-timeline-section">

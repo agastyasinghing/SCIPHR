@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "fighter1": "Charles Oliveira",
+    "fighter2": "Islam Makhachev",
+    "scipherPick": "Charles Oliveira",
+    "scipherConfidence": 72,
+    "vegasOdds": 28,
+    "difference": 44,
+    "event": "UFC 294",
+    "reasoning": "Model sees massive value — Oliveira's submission game heavily underrated by the market"
+  },
+  {
+    "id": 2,
+    "fighter1": "Sean O'Malley",
+    "fighter2": "Merab Dvalishvili",
+    "scipherPick": "Merab Dvalishvili",
+    "scipherConfidence": 68,
+    "vegasOdds": 35,
+    "difference": 33,
+    "event": "UFC 306",
+    "reasoning": "Wrestling volume and cardio advantage heavily underpriced by bookmakers"
+  },
+  {
+    "id": 3,
+    "fighter1": "Alexandre Pantoja",
+    "fighter2": "Kai Kara-France",
+    "scipherPick": "Kai Kara-France",
+    "scipherConfidence": 65,
+    "vegasOdds": 40,
+    "difference": 25,
+    "event": "UFC Fight Night",
+    "reasoning": "Striking differential and recent form trending sharply upward"
+  }
+]
