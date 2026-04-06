@@ -5,8 +5,11 @@
 service_account.json
 *.json.key
 
-# Model & data (large files — never commit)
-*.pkl
+# Data (large files — never commit)
+# Note: golden_model.pkl is committed (1.9MB) for Render deployment.
+# Other .pkl files (dev artifacts, old models) are excluded.
+models/best_ufc_model.pkl
+models/best_ufc_model_v2.pkl
 data/*.csv
 data/*.parquet
 

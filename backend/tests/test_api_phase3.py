@@ -222,16 +222,17 @@ class TestPredict:
 
 class TestHealth:
     def test_health_ok(self, client):
-        """[5] DB reachable + model loaded → 200 {"status": "ok"}."""
+        """[5] DB reachable + model loaded → 200 with db_connected/model_loaded/version fields."""
         resp = client.get("/health")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
-        assert body["db"] == "ok"
-        assert body["model"] == "loaded"
+        assert body["db_connected"] == "ok"
+        assert body["model_loaded"] == "loaded"
+        assert "version" in body
 
     def test_health_db_down(self, client):
-        """[6] engine.connect() raises → 503 {"status": "degraded", "db": "error"}."""
+        """[6] engine.connect() raises → 503 {"status": "degraded", "db_connected": "error"}."""
         bad_engine = MagicMock()
         bad_engine.connect.side_effect = Exception("Connection refused")
         app_module.engine = bad_engine
@@ -240,18 +241,45 @@ class TestHealth:
         assert resp.status_code == 503
         body = resp.json()
         assert body["status"] == "degraded"
-        assert body["db"] == "error"
-        assert body["model"] == "loaded"
+        assert body["db_connected"] == "error"
+        assert body["model_loaded"] == "loaded"
 
     def test_health_model_not_loaded(self, client):
-        """[7] predictor is None → 503 {"status": "degraded", "model": "not_loaded"}."""
+        """[7] predictor is None → 503 {"status": "degraded", "model_loaded": "not_loaded"}."""
         app_module.predictor = None
 
         resp = client.get("/health")
         assert resp.status_code == 503
         body = resp.json()
         assert body["status"] == "degraded"
-        assert body["model"] == "not_loaded"
+        assert body["model_loaded"] == "not_loaded"
+
+
+# ── CORS tests ────────────────────────────────────────────────────────────────
+
+class TestCORS:
+    def test_cors_allowed_origin_gets_header(self, client):
+        """[23] CORS preflight with an allowed origin returns Access-Control-Allow-Origin."""
+        resp = client.options(
+            "/health",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Content-Type",
+            },
+        )
+        assert resp.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+    def test_cors_unlisted_origin_is_blocked(self, client):
+        """[24] CORS does not echo back an origin that is not in ALLOWED_ORIGINS."""
+        resp = client.options(
+            "/health",
+            headers={
+                "Origin": "https://evil.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert resp.headers.get("access-control-allow-origin") != "https://evil.com"
 
 
 # ── /events tests ─────────────────────────────────────────────────────────────

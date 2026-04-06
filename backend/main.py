@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+import json
+import logging
 import os
 import sys
-import json
 import numpy as np
 from pathlib import Path
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -16,6 +17,35 @@ from gemini_service import generate_ai_poster
 from ai_analyst import ai_analyst
 from intelligence.orchestrator import IntelligenceOrchestrator
 from intelligence.utils import classify_style
+
+# ── Structured logging (JSON, stdlib — no extra deps) ────────────────────────
+# LOG_LEVEL env var controls verbosity (default: INFO).
+# In production all output is JSON so Render/Sentry can parse structured fields.
+
+class _JSONFormatter(logging.Formatter):
+    def format(self, record):
+        entry = {
+            "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            entry["exc"] = self.formatException(record.exc_info)
+        return json.dumps(entry)
+
+
+def _configure_logging():
+    handler = logging.StreamHandler()
+    handler.setFormatter(_JSONFormatter())
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+
+
+_configure_logging()
+log = logging.getLogger(__name__)
 
 # ── Sentry ────────────────────────────────────────────────────────────────────
 # Initialised only when SENTRY_DSN env var is set — no-op otherwise.
@@ -30,10 +60,25 @@ if _sentry_dsn:
     )
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
-# TODO (Phase 6): Switch limiter storage to Redis (Upstash).
-# Current in-memory storage resets on server restart — fine for v1 but
-# configure UPSTASH_REDIS_URL before high-traffic launch.
-limiter = Limiter(key_func=get_remote_address)
+# Uses Upstash Redis when UPSTASH_REDIS_URL is set — rate limits survive Render
+# free-tier restarts.  Falls back to in-memory storage if Redis is unreachable
+# so the server always starts even if Upstash is misconfigured.
+_upstash_url = os.getenv("UPSTASH_REDIS_URL")
+_limiter_storage_uri = None
+if _upstash_url:
+    try:
+        import redis as _redis_mod
+        _test = _redis_mod.from_url(_upstash_url, socket_connect_timeout=3)
+        _test.ping()
+        _limiter_storage_uri = _upstash_url
+        log.info("rate_limiter_storage_redis")
+    except Exception as _redis_err:
+        log.warning("redis_unavailable_using_memory", extra={"error": str(_redis_err)})
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    **({"storage_uri": _limiter_storage_uri} if _limiter_storage_uri else {}),
+)
 
 app = FastAPI()
 app.state.limiter = limiter
@@ -103,22 +148,28 @@ async def startup_event():
     # Fail fast on misconfigured DATABASE_URL (SELECT 1 health check)
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    print("✓ Database connection verified")
+    log.info("db_connected")
 
     # ── Model ─────────────────────────────────────────────────────────────
-    print("Loading GOLDEN predictor...")
-    sys.path.insert(0, '../src')
+    # __file__-anchored paths are container-safe regardless of working directory.
+    # Locally: backend/../src and backend/../models work identically.
+    _repo_root = Path(__file__).parent.parent
+    _src_path = str(_repo_root / "src")
+    _model_path = str(_repo_root / "models" / "golden_model.pkl")
+
+    log.info("model_loading", extra={"path": _model_path})
+    sys.path.insert(0, _src_path)
     from predictor_golden import UFCFightPredictorGolden
 
     predictor = UFCFightPredictorGolden(
-        model_path='../models/golden_model.pkl',
+        model_path=_model_path,
         engine=engine,
     )
-    print("✓ GOLDEN predictor loaded and ready!")
+    log.info("model_loaded")
 
     # ── Intelligence orchestrator ─────────────────────────────────────────
     orchestrator = IntelligenceOrchestrator(engine)
-    print("✓ Intelligence orchestrator ready")
+    log.info("orchestrator_ready")
 
     # ── Events data ───────────────────────────────────────────────────────
     # Load events.json once at startup into memory (zero disk I/O per request).
@@ -133,9 +184,12 @@ async def startup_event():
             fid = fight.get("fight_id")
             if fid is not None:
                 events_index[int(fid)] = fight
-    print(
-        f"✓ Events loaded: {len(events_data['events'])} event(s), "
-        f"{len(events_index)} fight(s) indexed"
+    log.info(
+        "events_loaded",
+        extra={
+            "events": len(events_data["events"]),
+            "fights_indexed": len(events_index),
+        },
     )
 
 
@@ -244,8 +298,9 @@ async def health_check():
 
     body = {
         "status": "ok" if is_healthy else "degraded",
-        "db": db_status,
-        "model": model_status,
+        "db_connected": db_status,
+        "model_loaded": model_status,
+        "version": os.getenv("APP_VERSION", "unknown"),
     }
     return JSONResponse(status_code=200 if is_healthy else 503, content=body)
 
@@ -665,9 +720,7 @@ async def predict_fight(request: PredictionRequest):
         raise HTTPException(status_code=500, detail="Orchestrator not initialized")
 
     try:
-        print(f"\n{'='*70}")
-        print(f"PREDICTION REQUEST: {request.fighter1} vs {request.fighter2}")
-        print(f"{'='*70}")
+        log.info("predict_request", extra={"fighter1": request.fighter1, "fighter2": request.fighter2})
 
         result = predictor.predict_fight(
             request.fighter1,
@@ -678,7 +731,7 @@ async def predict_fight(request: PredictionRequest):
         if result is None:
             raise HTTPException(status_code=404, detail="One or both fighters not found")
 
-        print(f"\nResult received. Winner: {result.get('winner')}, Confidence: {result.get('confidence')}")
+        log.debug("predict_result", extra={"winner": result.get("winner"), "confidence": result.get("confidence")})
 
         # Resolve event context from fight_id (None for ad-hoc predictions).
         # Modules degrade gracefully when event_fight is None.
@@ -695,15 +748,15 @@ async def predict_fight(request: PredictionRequest):
             fight_id=request.fight_id,
             event_fight=event_fight,
         )
-        print("✓ Intelligence computed")
+        log.debug("intelligence_computed")
 
         # AI analysis is NOT generated here — it is async and non-blocking.
         # The frontend calls POST /generate-ai-analysis separately after the
         # prediction renders.  ai_analysis: null is the intentional response.
         if not result.get('fighter1_stats') or not result.get('fighter2_stats'):
-            print(f"⚠️ fighter stats missing from predictor result for {result['fighter1']} vs {result['fighter2']}")
+            log.warning("fighter_stats_missing", extra={"fighter1": result["fighter1"], "fighter2": result["fighter2"]})
 
-        print("\nBuilding response...")
+        log.debug("building_response")
         response = {
             "fighter1": result['fighter1'],
             "fighter2": result['fighter2'],
@@ -720,9 +773,7 @@ async def predict_fight(request: PredictionRequest):
             "intelligence": intel_result.model_dump(),
         }
 
-        print(f"Response built successfully!")
-        print(f"Confidence: {response['confidence']}")
-        print(f"{'='*70}\n")
+        log.info("predict_success", extra={"winner": response["winner"], "confidence": response["confidence"]})
 
         # Log every prediction — non-negotiable per CLAUDE.md.
         # try/except ensures a DB failure here never fails the response.
@@ -753,18 +804,14 @@ async def predict_fight(request: PredictionRequest):
                     )
                 )
         except Exception as log_err:
-            print(f"predictions_log INSERT failed (non-fatal): {log_err}")
+            log.warning("predictions_log_insert_failed", extra={"error": str(log_err)})
 
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        print(f"\n{'='*70}")
-        print(f"❌ ERROR IN PREDICTION:")
-        print(traceback.format_exc())
-        print(f"{'='*70}\n")
+        log.error("predict_error", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -842,7 +889,7 @@ async def get_historical_scorecard(limit: int = 50, offset: int = 0):
         }
 
     except Exception as e:
-        print(f"❌ /historical-scorecard error: {e}")
+        log.error("historical_scorecard_error", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -859,12 +906,14 @@ class AIPosterRequest(BaseModel):
 async def create_ai_poster(request: Request, poster_request: AIPosterRequest):
     """Generate AI poster using Gemini."""
     try:
-        print(f"\n{'='*70}")
-        print(f"AI POSTER REQUEST")
-        print(f"Fighter 1: {poster_request.fighter1_name}")
-        print(f"Fighter 2: {poster_request.fighter2_name}")
-        print(f"Winner: {poster_request.prediction.get('winner')}")
-        print(f"{'='*70}\n")
+        log.info(
+            "poster_request",
+            extra={
+                "fighter1": poster_request.fighter1_name,
+                "fighter2": poster_request.fighter2_name,
+                "winner": poster_request.prediction.get("winner"),
+            },
+        )
 
         f1_stats = predictor.feature_calculator.get_latest_fighter_stats(poster_request.fighter1_name)
         f2_stats = predictor.feature_calculator.get_latest_fighter_stats(poster_request.fighter2_name)
@@ -919,11 +968,7 @@ async def create_ai_poster(request: Request, poster_request: AIPosterRequest):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        print(f"\n{'='*70}")
-        print(f"ERROR IN AI POSTER GENERATION:")
-        print(traceback.format_exc())
-        print(f"{'='*70}\n")
+        log.error("poster_error", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -961,8 +1006,7 @@ async def generate_ai_analysis(request: Request, analysis_request: AIAnalysisReq
         )
         return {"analysis": analysis}
     except Exception as e:
-        import traceback
-        print(f"AI analysis generation failed: {traceback.format_exc()}")
+        log.error("ai_analysis_error", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -976,11 +1020,7 @@ async def get_detailed_stats(request: DetailedStatsRequest):
         fighter1_name = request.fighter1_name
         fighter2_name = request.fighter2_name
 
-        print(f"\n{'='*70}")
-        print(f"📊 DETAILED STATS REQUEST")
-        print(f"Fighter 1: {fighter1_name}")
-        print(f"Fighter 2: {fighter2_name}")
-        print(f"{'='*70}\n")
+        log.info("detailed_stats_request", extra={"fighter1": fighter1_name, "fighter2": fighter2_name})
 
         result = predictor.predict_fight(fighter1_name, fighter2_name, verbose=False)
 
@@ -1039,13 +1079,11 @@ async def get_detailed_stats(request: DetailedStatsRequest):
             "f2_recent_fights": generate_recent_record(f2_stats),
         }
 
-        print("✅ Stats compiled successfully\n")
+        log.debug("detailed_stats_compiled")
         return {"success": True, **detailed_stats}
 
     except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        print(traceback.format_exc())
+        log.error("detailed_stats_error", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
