@@ -164,6 +164,10 @@ class AIAnalysisRequest(BaseModel):
     confidence: float
     fighter1_stats: dict
     fighter2_stats: dict
+    # IntelligenceResult.model_dump() from the /predict response.
+    # Keys used: chaos, perception_gap, narrative_trap, value_bet.
+    # Optional — None for ad-hoc predictions without an orchestrator result.
+    intelligence_signals: Optional[dict] = None
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -846,6 +850,8 @@ class AIPosterRequest(BaseModel):
     fighter1_name: str
     fighter2_name: str
     prediction: dict  # Contains winner, confidence, etc.
+    # "1:1" = standard (default), "9:16" = Instagram Story format
+    aspect_ratio: Optional[str] = "1:1"
 
 
 @app.post("/generate-ai-poster")
@@ -893,7 +899,12 @@ async def create_ai_poster(request: Request, poster_request: AIPosterRequest):
             'confidence': float(poster_request.prediction.get('confidence', 0)) * 100,
         }
 
-        result = generate_ai_poster(fighter1_data, fighter2_data, prediction_data)
+        result = generate_ai_poster(
+            fighter1_data,
+            fighter2_data,
+            prediction_data,
+            aspect_ratio=poster_request.aspect_ratio or "1:1",
+        )
 
         if result['success']:
             return {
@@ -925,9 +936,9 @@ async def generate_ai_analysis(request: Request, analysis_request: AIAnalysisReq
     Called by the frontend AFTER /predict renders — keeps /predict fast.
     Rate limited to 3/hour/IP to protect Claude API costs.
 
-    Request body mirrors the fields that ai_analyst.generate_fight_analysis()
-    needs: fighter names, winner, confidence, and both fighters' stats dicts
-    (the same dicts returned in the /predict fighter1_stats/fighter2_stats fields).
+    Request body: fighter names, winner, confidence, fighter stats dicts
+    (from /predict fighter1_stats/fighter2_stats), and intelligence_signals
+    (from /predict intelligence — the IntelligenceResult model_dump()).
     """
     import asyncio
 
@@ -944,7 +955,9 @@ async def generate_ai_analysis(request: Request, analysis_request: AIAnalysisReq
     # loop is never blocked, so other requests can proceed while Claude responds.
     try:
         analysis = await asyncio.to_thread(
-            ai_analyst.generate_fight_analysis, prediction_data
+            ai_analyst.generate_fight_analysis,
+            prediction_data,
+            analysis_request.intelligence_signals,
         )
         return {"analysis": analysis}
     except Exception as e:

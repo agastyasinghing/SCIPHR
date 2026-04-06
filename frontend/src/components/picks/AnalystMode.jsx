@@ -282,7 +282,10 @@ const OverviewSection = ({
           <div className="ai-analysis-panel">
             <h4 className="ai-analysis-header">AI Analysis</h4>
             {aiAnalysisLoading && (
-              <p className="ai-analysis-loading">Analyzing...</p>
+              <div className="ai-analysis-loading">
+                <div className="ai-spinner" aria-label="Analyzing" />
+                <span>Analyzing...</span>
+              </div>
             )}
             {aiAnalysisError && (
               <p className="ai-analysis-error">{aiAnalysisError}</p>

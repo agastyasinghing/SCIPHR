@@ -98,11 +98,18 @@ Make this poster epic, cinematic, shareable, and professional. All text must be 
     return prompt
 
 
-def generate_ai_poster(fighter1_data, fighter2_data, prediction_data, style_name=None):
+def generate_ai_poster(
+    fighter1_data,
+    fighter2_data,
+    prediction_data,
+    style_name=None,
+    aspect_ratio: str = "1:1",
+):
     """
-    Generate AI poster using Imagen 4 Ultra on Vertex AI
-    Cost: $0.06 per image (6 cents)
-    Uses OAuth service account authentication
+    Generate AI poster using Imagen 4 Ultra on Vertex AI.
+    Cost: $0.06 per image.
+
+    aspect_ratio: "1:1" (standard, default) | "9:16" (Instagram Story format).
     """
     # Validate credentials at request time, not module import time.
     # Missing credentials makes this feature unavailable — it must not crash the server.
@@ -168,7 +175,7 @@ def generate_ai_poster(fighter1_data, fighter2_data, prediction_data, style_name
             "instances": [{"prompt": prompt}],
             "parameters": {
                 "sampleCount": 1,
-                "aspectRatio": "9:16",
+                "aspectRatio": aspect_ratio,
                 "negativePrompt": "blurry, low quality, distorted, text errors",
                 "personGeneration": "allow_adult"
             }
