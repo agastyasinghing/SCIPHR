@@ -5,7 +5,7 @@ be actionable in 3 months without re-deriving the motivation.
 
 ---
 
-## TODO-22 — Custom domain wiring (post-launch)
+## TODO-22 — Custom domain wiring (between paper launch and public announcement)
 
 **What:** Configure DNS for `sciphr.com` (apex → Vercel) and `api.sciphr.com` (CNAME → Render).
 
@@ -13,7 +13,11 @@ be actionable in 3 months without re-deriving the motivation.
 Custom domain requires two env var updates: `VITE_API_URL` in Vercel → `https://api.sciphr.com`,
 and `ALLOWED_ORIGINS` in Render → `https://sciphr.com,https://www.sciphr.com`.
 
-**Trigger:** When domain is purchased and paper launch is complete.
+**Timing:** Buy the domain BEFORE the public announcement, NOT before paper launch.
+Paper launch runs fine on `sciphr.vercel.app`. Set up DNS after paper launch validates the
+product, before sharing publicly. Do not delay the paper launch for this.
+
+**Trigger:** Paper launch complete + domain purchased.
 
 **Steps:**
 1. Add ALIAS/ANAME record for apex: `sciphr.com → cname.vercel-dns.com`
@@ -40,6 +44,29 @@ are unacceptable at public launch scale.
 No code changes required — plan upgrade is purely infrastructure.
 
 **Depends on:** Successful paper launch (confirm product works before paying).
+
+---
+
+## TODO-24 — Rotate Google service account key (manual — before deploy)
+
+**What:** The original `backend/service_account.json` was unprotected before `.gitignore` was added.
+Treat it as compromised. Generate a new key in Google Cloud Console and update the local `.env`.
+
+**Why:** A leaked service account key allows anyone to call the Vertex AI Imagen API at your expense.
+With the $10 cost alert (TODO-21) not yet configured, a leak could result in uncapped charges before
+you notice.
+
+**How (manual steps — cannot be automated):**
+1. Google Cloud Console → IAM & Admin → Service Accounts → select the Imagen service account
+2. Keys tab → Add Key → Create new key (JSON) → download
+3. Store as `backend/service_account.json` (already in `.gitignore`)
+4. Update `GOOGLE_APPLICATION_CREDENTIALS` in `backend/.env` to point to the new file
+5. Revoke the old key on the same Keys tab
+
+**When:** Before deploying to Render. This is a hard blocker — do not deploy with a potentially
+compromised key. Takes ~5 minutes.
+
+**Depends on:** Nothing. Do this before any other Phase 6 deploy steps.
 
 ---
 

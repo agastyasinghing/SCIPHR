@@ -64,11 +64,12 @@ if _sentry_dsn:
 # free-tier restarts.  Falls back to in-memory storage if Redis is unreachable
 # so the server always starts even if Upstash is misconfigured.
 _upstash_url = os.getenv("UPSTASH_REDIS_URL")
+_REDIS_CONNECT_TIMEOUT_S = 2  # used at startup and in /health — single source of truth
 _limiter_storage_uri = None
 if _upstash_url:
     try:
         import redis as _redis_mod
-        _test = _redis_mod.from_url(_upstash_url, socket_connect_timeout=3)
+        _test = _redis_mod.from_url(_upstash_url, socket_connect_timeout=_REDIS_CONNECT_TIMEOUT_S)
         _test.ping()
         _limiter_storage_uri = _upstash_url
         log.info("rate_limiter_storage_redis")
@@ -264,6 +265,37 @@ def determine_weight_class(weight_lbs):
         return 'Heavyweight'
 
 
+# ── Input sanitization ────────────────────────────────────────────────────────
+
+_FIGHTER_NAME_MAX_LEN = 100
+
+
+def _sanitize_fighter_name(name: str, field: str = "Fighter name") -> str:
+    """
+    Validate and normalise a fighter name from user input (PRD §18 Security).
+
+    Rules:
+      - Strip leading/trailing whitespace.
+      - Max 100 characters after stripping.
+      - Must be fully printable (rejects NUL bytes, control chars, etc.).
+
+    Raises HTTPException 422 on any violation so FastAPI surfaces a clear
+    error to the caller rather than passing garbage into the predictor.
+    """
+    name = name.strip()
+    if len(name) > _FIGHTER_NAME_MAX_LEN:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field} must be {_FIGHTER_NAME_MAX_LEN} characters or fewer",
+        )
+    if not name.isprintable():
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field} contains invalid characters",
+        )
+    return name
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -294,12 +326,28 @@ async def health_check():
         db_status = "error"
 
     model_status = "loaded" if predictor is not None else "not_loaded"
+
+    # Redis check — optional; in-memory fallback is used if Redis is unreachable.
+    # "not_configured" when UPSTASH_REDIS_URL is absent (acceptable for dev).
+    # "error" when configured but unreachable (rate limits fall back to in-memory).
+    # Neither state marks the service degraded — only DB/model failures do.
+    redis_status = "not_configured"
+    if _upstash_url:
+        try:
+            import redis as _redis_chk
+            _r = _redis_chk.from_url(_upstash_url, socket_connect_timeout=_REDIS_CONNECT_TIMEOUT_S)
+            _r.ping()
+            redis_status = "ok"
+        except Exception:
+            redis_status = "error"
+
     is_healthy = db_status == "ok" and model_status == "loaded"
 
     body = {
         "status": "ok" if is_healthy else "degraded",
         "db_connected": db_status,
         "model_loaded": model_status,
+        "redis_connected": redis_status,
         "version": os.getenv("APP_VERSION", "unknown"),
     }
     return JSONResponse(status_code=200 if is_healthy else 503, content=body)
@@ -434,7 +482,7 @@ async def get_fighter_profile(fighter_name: str):
         raise HTTPException(status_code=500, detail="Predictor not initialized")
 
     from urllib.parse import unquote
-    fighter_name = unquote(fighter_name)
+    fighter_name = _sanitize_fighter_name(unquote(fighter_name))
 
     matched_name = predictor.search_fighter(fighter_name)
 
@@ -573,7 +621,7 @@ async def get_fighter_history(fighter_name: str):
         raise HTTPException(status_code=500, detail="Database not initialized")
 
     from urllib.parse import unquote
-    fighter_name = unquote(fighter_name)
+    fighter_name = _sanitize_fighter_name(unquote(fighter_name))
 
     # Apply fuzzy match if predictor is ready; fall back to exact name otherwise
     if predictor is not None:
@@ -669,7 +717,9 @@ async def predict_fight_simple(request: SimplePredictionRequest):
     Use this for low-latency contexts (e.g. bulk previews, dashboard cards).
     For the full intelligence bundle use POST /predict.
     """
-    if request.fighter1.strip().lower() == request.fighter2.strip().lower():
+    f1 = _sanitize_fighter_name(request.fighter1, "fighter1")
+    f2 = _sanitize_fighter_name(request.fighter2, "fighter2")
+    if f1.lower() == f2.lower():
         raise HTTPException(
             status_code=400,
             detail="Fighter 1 and Fighter 2 must be different fighters",
@@ -677,7 +727,7 @@ async def predict_fight_simple(request: SimplePredictionRequest):
     if predictor is None:
         raise HTTPException(status_code=500, detail="Predictor not initialized")
 
-    result = predictor.predict_fight(request.fighter1, request.fighter2, verbose=False)
+    result = predictor.predict_fight(f1, f2, verbose=False)
     if result is None:
         raise HTTPException(status_code=404, detail="One or both fighters not found")
 
@@ -708,7 +758,9 @@ async def predict_fight(request: PredictionRequest):
     (see _safe_compute in orchestrator.py — no module failure can fail /predict).
     """
     # Input validation runs before globals check — no initialized state needed.
-    if request.fighter1.strip().lower() == request.fighter2.strip().lower():
+    f1 = _sanitize_fighter_name(request.fighter1, "fighter1")
+    f2 = _sanitize_fighter_name(request.fighter2, "fighter2")
+    if f1.lower() == f2.lower():
         raise HTTPException(
             status_code=400,
             detail="Fighter 1 and Fighter 2 must be different fighters",
@@ -720,11 +772,11 @@ async def predict_fight(request: PredictionRequest):
         raise HTTPException(status_code=500, detail="Orchestrator not initialized")
 
     try:
-        log.info("predict_request", extra={"fighter1": request.fighter1, "fighter2": request.fighter2})
+        log.info("predict_request", extra={"fighter1": f1, "fighter2": f2})
 
         result = predictor.predict_fight(
-            request.fighter1,
-            request.fighter2,
+            f1,
+            f2,
             verbose=False,
         )
 
@@ -987,10 +1039,14 @@ async def generate_ai_analysis(request: Request, analysis_request: AIAnalysisReq
     """
     import asyncio
 
+    f1 = _sanitize_fighter_name(analysis_request.fighter1, "fighter1")
+    f2 = _sanitize_fighter_name(analysis_request.fighter2, "fighter2")
+    winner = _sanitize_fighter_name(analysis_request.winner, "winner")
+
     prediction_data = {
-        "fighter1": analysis_request.fighter1,
-        "fighter2": analysis_request.fighter2,
-        "winner": analysis_request.winner,
+        "fighter1": f1,
+        "fighter2": f2,
+        "winner": winner,
         "confidence": analysis_request.confidence,
         "fighter1_stats": analysis_request.fighter1_stats,
         "fighter2_stats": analysis_request.fighter2_stats,

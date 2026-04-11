@@ -169,6 +169,7 @@ Phase 6 — Deploy. Code complete. Needs platform setup + env vars.
 | Apr 2026 | fastapi upgraded 0.104.1 → 0.135.3 | starlette 0.27 incompatible with httpx 0.28 in venv |
 | Apr 2026 | Feature storage: JSONB per fighter (not per fight) | Per-fight JSONB ~912MB exceeds Supabase free tier; per-fighter ~85MB |
 | Apr 2026 | Features stored in canonical r_* form | Eliminates was_red branch at prediction time; simplifies build_full_feature_vector |
+| Apr 2026 | Deployment platform: Render (not Railway) | OQ-10 resolved: Render free tier chosen over Railway. Both support Docker + auto-restart. Render DX is slightly simpler for a solo operator. Upgrade to Render Starter ($7/mo) before public announcement to eliminate 15-min cold-start spin-downs (see TODOS.md TODO-23). |
 | Apr 2026 | Sync SQLAlchemy + psycopg2 (not asyncpg) | Prediction pipeline is sync Python; FastAPI threadpools sync calls automatically |
 | Apr 2026 | Schema via create_all(), Alembic deferred to Phase 6 | Schema stable after Phase 1; see TODOS.md TODO-01 |
 | Apr 2026 | ChaosResult.label renamed to .tier, MODERATE→MIXED | PRD §10.6 uses 'tier' and 'MIXED'; 'label' was a naming deviation. All tests updated. |

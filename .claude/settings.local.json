@@ -63,7 +63,10 @@
       "Bash(tee /tmp/ship_pytest.txt)",
       "Bash(wait)",
       "Bash(tee /tmp/ship_vitest2.txt)",
-      "Bash(tee /tmp/ship_pytest2.txt)"
+      "Bash(tee /tmp/ship_pytest2.txt)",
+      "Bash(xargs grep:*)",
+      "Bash(python -c \"from ai_analyst import ai_analyst; print\\('ai_analyst ok'\\)\")",
+      "Bash(python:*)"
     ]
   }
 }

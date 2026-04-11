@@ -2,6 +2,24 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.15.0] - 2026-04-11
+
+### Added
+- `backend/scripts/resolve_outcomes.py`: post-fight outcome resolution script; accepts `--event-id` and `--results` (JSON array); updates `actual_winner`, `was_correct`, `actual_method`, `actual_round`, `resolved_at` in `predictions_log`; idempotent; `--dry-run` supported
+- `backend/tests/test_resolve_outcomes.py`: 9 tests covering correct/wrong prediction, order-insensitive matching, dry-run, no-match warning, winner-not-in-fight skip, idempotency, event_id filter, method/round persistence
+- `backend/main.py`: `_sanitize_fighter_name()` helper — strips whitespace, enforces ≤100 chars, rejects non-printable chars; applied to `POST /predict`, `POST /predict/simple`, `POST /generate-ai-analysis`, `GET /fighter/{name}`, `GET /fighter/{name}/history`
+- `backend/main.py`: `redis_connected` field in `GET /health` response (`"ok"` / `"error"` / `"not_configured"`); pings Upstash using `_REDIS_CONNECT_TIMEOUT_S`; does not affect degraded status (in-memory fallback covers Redis absence)
+- `TODOS.md`: TODO-24 — Google service account key rotation (hard blocker before Render deploy)
+
+### Changed
+- `backend/main.py`: extracted `_REDIS_CONNECT_TIMEOUT_S = 2` constant; unified Redis timeout between startup check and `/health` check (was 3s vs 2s inconsistency)
+- `TODOS.md`: TODO-22 — clarified custom domain purchase timing (buy before public announcement, not before paper launch)
+- `STATUS.md`: Decisions Log — OQ-10 formally resolved: Render free tier chosen over Railway
+- `SCIPHR_PRD_v1.1.md`: §17 paper launch graduation checklist — replaced "Claude analysis generating on 80%+ of predictions" with "Template analysis generating on 100% of predictions (Claude wiring deferred to post-launch — see TODOS.md TODO-19)"
+
+### Fixed
+- `backend/tests/test_api_phase3.py`: `test_health_ok` now asserts `redis_connected == "not_configured"` (correct for test env without `UPSTASH_REDIS_URL`)
+
 ## [0.1.14.0] - 2026-04-05
 
 ### Added
