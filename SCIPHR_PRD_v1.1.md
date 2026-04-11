@@ -2050,7 +2050,7 @@ Infrastructure
 □ /health returns green consistently
 □ Sentry has been triggered at least once (test it deliberately) and alert received
 □ Odds API is pulling real odds for at least one fight card
-□ Claude analysis generating on 80%+ of predictions
+□ Template analysis generating on 100% of predictions (Claude API wiring deferred to post-launch — see TODOS.md TODO-19)
 
 Product Quality  
 □ At least 20 predictions logged in predictions_log table
