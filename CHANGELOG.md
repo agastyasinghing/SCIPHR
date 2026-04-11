@@ -2,6 +2,11 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.16.1] - 2026-04-11
+
+### Fixed
+- `frontend/src/components/picks/FighterSearchModal.jsx`: request limit corrected from 10000 → 5000 — the 10000 value exceeded the backend's `le=5000` Query constraint, causing the FighterSearchModal to receive a 422 and fail to load any fighters for selection
+
 ## [0.1.16.0] - 2026-04-11
 
 ### Fixed
