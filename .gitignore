@@ -41,3 +41,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Claude Code local settings (tool permissions, session state — not for repo)
+.claude/settings.local.json

@@ -2,6 +2,18 @@
 
 All notable changes to SCIPHR will be documented in this file.
 
+## [0.1.16.0] - 2026-04-11
+
+### Fixed
+- `backend/main.py`: `/fighters` endpoint limit cap raised from 500 → 5000 — requests for the full fighter database (2,615 fighters) returned a 422 validation error, causing `FighterSearch` to silently display 0 fighters
+- `frontend/src/pages/FighterSearch.jsx`: request limit aligned to 5000 to match backend cap; API failures now surface a visible error card instead of an empty list
+
+### Added
+- `frontend/src/__tests__/FighterSearch.test.jsx`: 3 tests covering successful load, API failure → error card (regression for the silent-zero-fighters bug), and correct limit parameter
+
+### Changed
+- `.gitignore`: `.claude/settings.local.json` excluded from repo (local tool-permission state, not project code)
+
 ## [0.1.15.0] - 2026-04-11
 
 ### Added
