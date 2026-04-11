@@ -6,7 +6,7 @@ Covers new codepaths introduced in Phase 3:
   [2]  /predict: fight_id provided → orchestrator.compute receives event_fight
   [3]  /predict: fight_id=None → orchestrator.compute receives event_fight=None
   [4]  /predict: orchestrator returns empty IntelligenceResult → response still valid
-  [5]  GET /health: db ok + model loaded → 200 {"status": "ok"}
+  [5]  GET /health: db ok + model loaded → 200 {"status": "ok", "redis_connected": "not_configured"}
   [6]  GET /health: engine raises on SELECT 1 → 503 {"status": "degraded"}
   [7]  GET /health: predictor is None → 503 {"status": "degraded", "model": "not_loaded"}
   [8]  GET /events: returns event list from in-memory events_data
@@ -24,6 +24,7 @@ Covers new codepaths introduced in Phase 3:
   [20] POST /generate-ai-analysis: returns analysis dict
   [21] POST /generate-ai-analysis: rate limit 429 on 4th request
   [22] GET /fighter/{name}/history: blue-corner (b_name) path returns correct result/opponent
+  [23-27] Input sanitization: >100-char names + non-printable chars → 422; whitespace stripped
 
 Setup:
   - startup_event is cleared at module import to prevent real DB/model loading.
@@ -222,13 +223,15 @@ class TestPredict:
 
 class TestHealth:
     def test_health_ok(self, client):
-        """[5] DB reachable + model loaded → 200 with db_connected/model_loaded/version fields."""
+        """[5] DB reachable + model loaded → 200 with db_connected/model_loaded/redis_connected/version fields."""
         resp = client.get("/health")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
         assert body["db_connected"] == "ok"
         assert body["model_loaded"] == "loaded"
+        # Redis not configured in test env — in-memory fallback is active.
+        assert body["redis_connected"] == "not_configured"
         assert "version" in body
 
     def test_health_db_down(self, client):
@@ -253,6 +256,53 @@ class TestHealth:
         body = resp.json()
         assert body["status"] == "degraded"
         assert body["model_loaded"] == "not_loaded"
+
+
+# ── Input sanitization tests ──────────────────────────────────────────────────
+
+class TestInputSanitization:
+    """Verify _sanitize_fighter_name() enforcement on fighter name endpoints."""
+
+    def test_predict_name_too_long_returns_422(self, client):
+        """POST /predict with fighter1 > 100 chars → 422."""
+        resp = client.post("/predict", json={
+            "fighter1": "A" * 101,
+            "fighter2": "Fighter B",
+        })
+        assert resp.status_code == 422
+
+    def test_predict_nonprintable_char_returns_422(self, client):
+        """POST /predict with NUL byte in fighter name → 422."""
+        resp = client.post("/predict", json={
+            "fighter1": "Jon\x00Jones",
+            "fighter2": "Fighter B",
+        })
+        assert resp.status_code == 422
+
+    def test_predict_simple_name_too_long_returns_422(self, client):
+        """POST /predict/simple with fighter2 > 100 chars → 422."""
+        resp = client.post("/predict/simple", json={
+            "fighter1": "Fighter A",
+            "fighter2": "B" * 101,
+        })
+        assert resp.status_code == 422
+
+    def test_predict_simple_nonprintable_returns_422(self, client):
+        """POST /predict/simple with control char in fighter name → 422."""
+        resp = client.post("/predict/simple", json={
+            "fighter1": "Fighter\x1bA",
+            "fighter2": "Fighter B",
+        })
+        assert resp.status_code == 422
+
+    def test_predict_strips_whitespace(self, client, mock_predictor, mock_orchestrator):
+        """POST /predict with padded names → whitespace stripped before same-fighter check."""
+        # "Fighter A" and "  Fighter A  " should be treated as the same fighter.
+        resp = client.post("/predict", json={
+            "fighter1": "Fighter A",
+            "fighter2": "  Fighter A  ",
+        })
+        assert resp.status_code == 400  # same-fighter after strip
 
 
 # ── CORS tests ────────────────────────────────────────────────────────────────
