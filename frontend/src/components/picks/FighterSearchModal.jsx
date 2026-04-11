@@ -36,7 +36,7 @@ const FighterSearchModal = ({ onClose, onSelect, excludeFighter }) => {
   const loadFighters = async () => {
     setLoading(true);
     try {
-      const result = await api.getFighters('', 10000);
+      const result = await api.getFighters('', 5000);
       setFighters(result.fighters || []);
       setFilteredFighters((result.fighters || []).slice(0, 50));
     } catch (error) {
