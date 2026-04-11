@@ -429,7 +429,7 @@ async def get_event(event_id: int):
 @app.get("/fighters")
 async def get_fighters(
     search: str = None,
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=100, le=5000),  # covers full DB (2,615 fighters); raise if dataset grows
     weight_class: str = None,
     active_only: bool = False,
 ):

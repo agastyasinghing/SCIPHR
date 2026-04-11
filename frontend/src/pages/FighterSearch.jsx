@@ -42,6 +42,7 @@ const FighterSearch = () => {
   const [fighters, setFighters] = useState([]);           // full list from API
   const [filteredFighters, setFilteredFighters] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [weightClassFilter, setWeightClassFilter] = useState('all');
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'active' | 'inactive'
   const [sortBy, setSortBy] = useState('name');
@@ -56,10 +57,11 @@ const FighterSearch = () => {
     const loadFighters = async () => {
       setLoading(true);
       try {
-        const result = await api.getFighters('', 10000);
+        const result = await api.getFighters('', 5000); // backend Query le=5000; matches backend/main.py limit
         setFighters(result.fighters || []);
       } catch (error) {
         console.error('Failed to load fighters:', error);
+        setLoadError('Failed to load fighter database. Check that the backend is running.');
       } finally {
         setLoading(false);
       }
@@ -188,6 +190,12 @@ const FighterSearch = () => {
             <div className="loading-state">
               <div className="loading-spinner"></div>
               <p>Loading fighters...</p>
+            </div>
+          ) : loadError ? (
+            <div className="empty-state">
+              <div className="empty-icon">⚠️</div>
+              <h3>Could not load fighters</h3>
+              <p>{loadError}</p>
             </div>
           ) : filteredFighters.length === 0 ? (
             <div className="empty-state">
