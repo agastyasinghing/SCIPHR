@@ -228,11 +228,13 @@ class TestHistoryNormalisation:
 
 # ═══ CORRECTION 4 — extension guard (unit) ═════════════════════════════════
 def _complete_extension():
-    from fighter_profile.service import build_profile_extension  # noqa: F401
-    f = build_fields(_row())
+    from fighter_profile.service import build_coverage
+    row = _row()
+    f = build_fields(row)
+    cov = build_coverage("A", {"row": {"last_fight_date": None}, "fights": [], "dataset_end": None})
     return {
-        "data_quality": {"schema": "x", "fields": f, "core_stat_block": {}, "coverage": {},
-                         "legacy_compat": {}},
+        "data_quality": {"schema": "x", "fields": f, "core_stat_block": core_block_summary(row, f),
+                         "coverage": cov, "legacy_compat": {}},
         "scores": S.build_scores(f),
     }
 

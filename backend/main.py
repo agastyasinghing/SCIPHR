@@ -17,8 +17,11 @@ from gemini_service import generate_ai_poster
 from ai_analyst import ai_analyst
 from intelligence.orchestrator import IntelligenceOrchestrator
 from intelligence.utils import classify_style
+from sqlalchemy.exc import SQLAlchemyError
 from fighter_profile import (  # FTR-01B1 read-model (read-only)
     build_profile_extension, build_history, guard_extension, sanitize_raw_stats, json_safe,
+    read_legacy_raw_stats, assess_raw_inputs, assess_stored_scores, build_legacy_integrity,
+    fetch_fight_rows, participant_identity,
 )
 
 # ── Structured logging (JSON, stdlib — no extra deps) ────────────────────────
@@ -495,7 +498,18 @@ async def get_fighter_profile(fighter_name: str):
             detail=f"Fighter '{fighter_name}' not found"
         )
 
-    raw_stats = predictor.feature_calculator.get_latest_fighter_stats(matched_name)
+    # FTR-01B1-R2: the shared calculator coerces with float() and raises on a
+    # malformed stored number.  Only that coercion failure is caught here; the
+    # profile-only reader (which cannot raise on malformed numbers) takes over.
+    # Database/connection errors are NOT caught and still surface as failures.
+    malformed_keys: list = []
+    try:
+        raw_stats = predictor.feature_calculator.get_latest_fighter_stats(matched_name)
+    except (ValueError, TypeError):
+        if engine is None:
+            raise
+        log.warning("profile_raw_stats_fallback fighter=%r", matched_name)
+        raw_stats, malformed_keys = read_legacy_raw_stats(engine, matched_name)
 
     if not raw_stats:
         raise HTTPException(
@@ -503,11 +517,12 @@ async def get_fighter_profile(fighter_name: str):
             detail=f"No stats found for '{matched_name}'"
         )
 
-    # FTR-01B1-R1: neutralise non-finite/malformed legacy inputs at the boundary
-    # (a NaN/inf would otherwise make the JSON encoder fail with HTTP 500).
-    raw_stats, corrupted_legacy_fields = sanitize_raw_stats(raw_stats)
-    if corrupted_legacy_fields:
-        log.warning("profile_corrupt_legacy_values fighter=%r fields=%s", matched_name, corrupted_legacy_fields)
+    # FTR-01B1-R1/R2: neutralise non-finite, malformed and impossible legacy inputs at
+    # the boundary.  Each is replaced by the legacy placeholder (None -> 0) and reported
+    # in `legacy_integrity`; valid values pass through untouched.
+    raw_stats, nonfinite_keys = sanitize_raw_stats(raw_stats)
+    malformed_keys = sorted(set(malformed_keys) | set(nonfinite_keys))
+    raw_stats, range_corruption = assess_raw_inputs(raw_stats)
 
     weight = float(raw_stats.get('fighter_weight_lbs', 185) or 185)
 
@@ -553,8 +568,11 @@ async def get_fighter_profile(fighter_name: str):
                     ),
                     {"name": matched_name},
                 ).fetchone()
-    except Exception:
-        pass  # never block profile on a DB hiccup
+    except SQLAlchemyError:
+        pass  # never block profile on a DB hiccup (legacy behaviour; programming errors still surface)
+
+    # FTR-01B1-R2: validate stored scores (None / valid numbers pass; corrupted => ignore all stored)
+    stored_scores, stored_corruption = assess_stored_scores(stored)
 
     # Numeric building blocks for on-the-fly computation
     wins = float(raw_stats.get('fighter_w', 0) or 0)
@@ -580,49 +598,69 @@ async def get_fighter_profile(fighter_name: str):
 
     # Aura score (0–100): proxy for public hype level
     finish_proxy = min(1.0, (slpm / 6.0) * 0.5 + (td_avg / 5.0) * 0.5)
-    aura_score = float(stored.aura_score) if stored and stored.aura_score is not None else round(
+    aura_score = stored_scores["aura_score"] if stored_scores["aura_score"] is not None else round(
         min(100.0, win_rate * 40.0 + finish_proxy * 35.0 + min(total_fights, 20) / 20.0 * 25.0), 1
     )
 
     # Composite score (0–100): overall model-quality rating
-    composite_score = float(stored.composite_score) if stored and stored.composite_score is not None else round(
+    composite_score = stored_scores["composite_score"] if stored_scores["composite_score"] is not None else round(
         min(100.0, max(0.0, (win_rate * 40.0 + str_acc * 30.0 + str_def * 30.0) * 100.0)), 1
     )
 
     # Chaos contribution (0–100): how much this fighter raises fight volatility
     slpm_norm = min(1.0, slpm / 7.0)
     chin_risk = max(0.0, 1.0 - str_def)  # low defense = high chin risk
-    chaos_contribution = float(stored.chaos_contribution) if stored and stored.chaos_contribution is not None else round(
+    chaos_contribution = stored_scores["chaos_contribution"] if stored_scores["chaos_contribution"] is not None else round(
         min(100.0, (slpm_norm * 0.5 + chin_risk * 0.5) * 100.0), 1
     )
 
     # Mirage Meter (0–100): resume inflation proxy
     # High win rate + low defensive stats → potential mirage
-    mirage_meter = float(stored.mirage_meter) if stored and stored.mirage_meter is not None else round(
+    mirage_meter = stored_scores["mirage_meter"] if stored_scores["mirage_meter"] is not None else round(
         min(100.0, max(0.0, (win_rate - 0.65) * 200.0)) if win_rate > 0.65 and str_def < 0.55 else 0.0, 1
     )
 
-    scores_are_stored = stored and stored.aura_score is not None
+    scores_are_stored = stored_scores["aura_score"] is not None
+
+    # FTR-01B1-R2: legacy scores computed from corrupted inputs are withheld (null),
+    # never presented as trustworthy; the corruption is described in `legacy_integrity`,
+    # which is built independently of the data_quality extension.
+    legacy_scores = {
+        "aura_score": aura_score, "composite_score": composite_score,
+        "chaos_contribution": chaos_contribution, "mirage_meter": mirage_meter,
+    }
+    heuristic_scores = {n for n, v in stored_scores.items() if v is None}
+    legacy_integrity, withheld = build_legacy_integrity(
+        malformed_keys, range_corruption, stored_corruption, heuristic_scores)
+    for n in withheld:
+        legacy_scores[n] = None
+    if legacy_integrity["corrupted"]:
+        log.warning(
+            "profile_legacy_corruption fighter=%r raw=%s stored=%s withheld=%s", matched_name,
+            [e["field"] for e in legacy_integrity["raw_input_corruption"]],
+            [e["field"] for e in stored_corruption], sorted(withheld))
 
     # FTR-01B1: additive availability-aware objects.  Legacy `stats` and
-    # `intelligence` above are intentionally unchanged (see data_quality.legacy_compat).
+    # `intelligence` above are intentionally unchanged for valid data (see data_quality.legacy_compat).
     extension = guard_extension(build_profile_extension, engine, matched_name, log)
     if isinstance(extension["data_quality"], dict):
-        extension["data_quality"]["legacy_corrupted_fields"] = corrupted_legacy_fields
+        extension["data_quality"]["legacy_corrupted_fields"] = [
+            e["field"] for e in legacy_integrity["raw_input_corruption"]]
 
     return json_safe({
         "name": matched_name,
         "data_quality": extension["data_quality"],
         "scores": extension["scores"],
         "extension_status": extension["extension_status"],
+        "legacy_integrity": legacy_integrity,
         "stats": convert_numpy(stats),
         "intelligence": {
             "style": style_val,
             "is_active": is_active,
-            "aura_score": aura_score,
-            "composite_score": composite_score,
-            "chaos_contribution": chaos_contribution,
-            "mirage_meter": mirage_meter,
+            "aura_score": legacy_scores["aura_score"],
+            "composite_score": legacy_scores["composite_score"],
+            "chaos_contribution": legacy_scores["chaos_contribution"],
+            "mirage_meter": legacy_scores["mirage_meter"],
             "scores_source": "computed" if scores_are_stored else "heuristic",
         },
     })
@@ -649,23 +687,18 @@ async def get_fighter_history(fighter_name: str):
         if matched:
             fighter_name = matched
 
+    # FTR-01B1-R2: participant matching is whitespace/case-normalised (same rule as the
+    # profile coverage query); stored display names are preserved.
     with engine.connect() as conn:
-        rows = conn.execute(
-            text("""
-                SELECT r_name, b_name, date, winner, method, weight_class
-                FROM fights
-                WHERE r_name = :name OR b_name = :name
-                ORDER BY date DESC
-                LIMIT 20
-            """),
-            {"name": fighter_name},
-        ).fetchall()
+        all_rows = fetch_fight_rows(conn, fighter_name)
+        identity = participant_identity(conn, fighter_name, all_rows)
+    rows = all_rows[:20]
 
     if not rows:
         raise HTTPException(status_code=404, detail=f"No fight history found for '{fighter_name}'")
 
     # FTR-01B1: result is W/L/D/NC/UNKNOWN (never "not a win" == loss); additive metadata.
-    payload = build_history(fighter_name, rows)
+    payload = build_history(fighter_name, rows, identity)
     return {"name": fighter_name, "count": len(payload["fights"]), **payload}
 
 

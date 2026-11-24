@@ -69,7 +69,7 @@ SANITY_BOUNDS = {
     "reach_cm": (100.0, 260.0),
     "weight_lbs": (70.0, 800.0),
 }
-_RATE_MAX = 60.0   # slpm / td_avg / sub_avg upper sanity bound (observed max 24.3)
+RATE_MAX = 60.0   # slpm / td_avg / sub_avg upper sanity bound (observed max 24.3)
 
 UNITS = {
     "wins": "count", "losses": "count", "draws": "count",
@@ -211,7 +211,7 @@ def build_fields(row: dict) -> dict:
         td_avg_val = cls["td_avg"][1]
         for k in CORE_BLOCK:
             kind, x = cls[k]
-            upper = 1.0 if k in _FRACTION_FIELDS else _RATE_MAX
+            upper = 1.0 if k in _FRACTION_FIELDS else RATE_MAX
             if kind == "null":
                 fields[k] = _invalid(k, Basis.SOURCE_NAN, "Value is missing in the source dataset.")
             elif kind == "invalid":
