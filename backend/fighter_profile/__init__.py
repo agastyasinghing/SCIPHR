@@ -11,4 +11,7 @@ test_profile_isolation.py::test_cprofile_still_importable...).  It is therefore
 named ``fighter_profile``.
 """
 
-from .service import build_profile_extension, build_history, read_profile_inputs  # noqa: F401
+from .service import (  # noqa: F401
+    build_profile_extension, build_history, read_profile_inputs, guard_extension, validate_extension,
+)
+from .sanitize import sanitize_raw_stats, json_safe  # noqa: F401

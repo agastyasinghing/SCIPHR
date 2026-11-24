@@ -26,7 +26,6 @@ from typing import Optional
 from .availability import Basis, is_usable
 
 SCHEMA = "fighter_profile_scores_v1"
-MIN_RECORD_FOR_MIRAGE = 5   # provisional small-sample guard (documented, unvalidated)
 
 RECORD_DEFINITION = (
     "win_rate = wins / (wins + losses + draws); draws count as non-wins; "
@@ -136,24 +135,41 @@ def chaos_contribution(fields: dict) -> dict:
 
 
 # ── Mirage ─────────────────────────────────────────────────────────────────
-def mirage(fields: dict) -> dict:
-    label = "Mirage (record vs striking-defence gap)"
-    desc = ("Flags a strong win rate paired with weak striking defence. It does "
-            "NOT measure opposition quality or resume inflation: no opponent "
-            "data is used.")
-    unsupported = ["opposition_quality", "resume_inflation"]
-    req = ["wins", "losses", "draws", "str_def"]
+def _mirage_internal(fields: dict) -> Optional[float]:
+    """
+    INTERNAL, NON-PRODUCTION calculation (not exposed by the API).
+
+    Win rate above 65% together with striking defence below 55%.  It does not
+    measure opposition quality or resume inflation, and no eligibility cutoff
+    has been validated (the earlier 5-fight guard was unsupported and was
+    removed).  Returns None when inputs are missing/unconfirmed.
+    """
     win_rate, miss = _record(fields)
-    miss = miss + _missing(fields, ["str_def"])
-    if miss:
-        return _unavailable(label, desc, "MISSING_OR_UNCONFIRMED_INPUTS", req, miss, unsupported)
-    if record_total(fields) < MIN_RECORD_FOR_MIRAGE:
-        return _unavailable(label, desc, "INSUFFICIENT_RECORD", req, ["record_total>=%d" % MIN_RECORD_FOR_MIRAGE], unsupported)
+    if miss or _missing(fields, ["str_def"]):
+        return None
     sd = fields["str_def"]["value"]
     if not 0 <= sd <= 1:
-        return _unavailable(label, desc, "INPUT_OUT_OF_RANGE", req, ["str_def"], unsupported)
-    value = min(100.0, max(0.0, (win_rate - 0.65) * 200.0)) if (win_rate > 0.65 and sd < 0.55) else 0.0
-    return _provisional(value, label, desc, req, unsupported)
+        return None
+    if win_rate > 0.65 and sd < 0.55:
+        return min(100.0, max(0.0, (win_rate - 0.65) * 200.0))
+    return 0.0
+
+
+def mirage(fields: dict) -> dict:
+    """
+    Public Mirage score: intentionally withheld (human decision, FTR-01B1-R1).
+    The heuristic is unvalidated and does not measure what its name implies.
+    """
+    return _unavailable(
+        "Mirage (withheld: unvalidated heuristic)",
+        ("Withheld. The only available formula compares win rate with striking "
+         "defence; it does NOT measure opposition quality or resume inflation "
+         "and has not been validated, so no value is published."),
+        "UNVALIDATED_HEURISTIC",
+        ["wins", "losses", "draws", "str_def"],
+        [],
+        ["opposition_quality", "resume_inflation"],
+    )
 
 
 def build_scores(fields: dict) -> dict:

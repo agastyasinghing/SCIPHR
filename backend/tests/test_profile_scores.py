@@ -25,6 +25,7 @@ PICO = dict(wins=13, losses=4, draws=0, age=28.0, height_cm=0.0, reach_cm=0.0,
             td_avg=0.0, td_acc=0.0, td_def=0.0, sub_avg=0.0)
 
 ALL = ("composite", "aura", "chaos_contribution", "mirage")
+PUBLIC = ("composite", "aura", "chaos_contribution")   # mirage is withheld (UNVALIDATED_HEURISTIC)
 
 
 class TestComposite:
@@ -90,8 +91,11 @@ class TestPicoGating:
         sc = self.s[name]
         assert sc["value"] is None and sc["available"] is False
         assert sc["status"] == "unavailable"
-        assert sc["reason"] == "MISSING_OR_UNCONFIRMED_INPUTS"
-        assert sc["inputs_missing"]
+        if name == "mirage":
+            assert sc["reason"] == "UNVALIDATED_HEURISTIC"
+        else:
+            assert sc["reason"] == "MISSING_OR_UNCONFIRMED_INPUTS"
+            assert sc["inputs_missing"]
 
     def test_chaos_not_fifty_and_mirage_not_triggered(self):
         assert self.s["chaos_contribution"]["value"] is None   # legacy: 50.0
@@ -110,29 +114,28 @@ class TestMissingDefenceGating:
 
     def test_measured_defence_enables_scores(self):
         f = _fields(wins=16, losses=4, str_def=0.50)
-        m = S.mirage(f)
-        assert m["available"] is True
-        assert m["value"] == pytest.approx((0.8 - 0.65) * 200, abs=0.06)
+        assert S._mirage_internal(f) == pytest.approx((0.8 - 0.65) * 200, abs=0.06)
+        assert S.mirage(f)["value"] is None            # public score stays withheld
         assert S.chaos_contribution(f)["value"] == pytest.approx((4.2 / 7 * 0.5 + 0.5 * 0.5) * 100, abs=0.06)
 
-    def test_mirage_zero_when_defence_good(self):
-        assert S.mirage(_fields(wins=16, losses=4, str_def=0.70))["value"] == 0.0
+    def test_internal_mirage_zero_when_defence_good(self):
+        assert S._mirage_internal(_fields(wins=16, losses=4, str_def=0.70)) == 0.0
 
-    def test_mirage_small_record_guard(self):
-        m = S.mirage(_fields(wins=3, losses=0, str_def=0.40))
-        assert m["available"] is False and m["reason"] == "INSUFFICIENT_RECORD"
+    def test_internal_mirage_has_no_invented_record_cutoff(self):
+        # the earlier 5-fight guard was unsupported and removed
+        assert S._mirage_internal(_fields(wins=3, losses=0, str_def=0.40)) is not None
 
-    def test_mirage_out_of_range_input_rejected(self):
+    def test_internal_mirage_rejects_out_of_range_input(self):
         f = _fields(wins=16, losses=4, str_def=0.5)
         f["str_def"]["value"] = 1.7   # tamper: validation is defensive
-        assert S.mirage(f)["reason"] == "INPUT_OUT_OF_RANGE"
+        assert S._mirage_internal(f) is None
 
 
 class TestProvenanceAndHonesty:
     def test_every_score_is_marked_heuristic_provisional_unvalidated(self):
         s = S.build_scores(_fields())
         assert s["meta"]["not_model_output"] is True
-        for name in ALL:
+        for name in PUBLIC:
             sc = s[name]
             assert sc["provenance"] == "heuristic"
             assert sc["validated"] is False
@@ -149,17 +152,19 @@ class TestProvenanceAndHonesty:
         m = S.mirage(_fields(wins=16, losses=4, str_def=0.5))
         assert {"opposition_quality", "resume_inflation"} <= set(m["unsupported_claims"])
         assert "does NOT measure opposition quality" in m["description"]
+        assert m["value"] is None and m["available"] is False and m["reason"] == "UNVALIDATED_HEURISTIC"
 
     def test_ambiguous_zero_slpm_blocks_aura_and_chaos(self):
         f = _fields(slpm=0.0)
         assert S.aura(f)["available"] is False
         assert S.chaos_contribution(f)["available"] is False
 
-    def test_zero_td_avg_is_a_valid_aura_input(self):
-        assert S.aura(_fields(td_avg=0.0))["available"] is True
+    def test_zero_td_avg_is_not_a_valid_aura_input(self):
+        a = S.aura(_fields(td_avg=0.0))
+        assert a["available"] is False and "td_avg" in a["inputs_missing"]
 
     def test_scores_in_range_for_extremes(self):
         f = _fields(wins=100, losses=0, slpm=30.0, td_avg=24.0, str_def=0.99)
-        for fn in (S.aura, S.chaos_contribution, S.mirage, S.composite):
+        for fn in (S.aura, S.chaos_contribution, S.composite):
             v = fn(f)["value"]
             assert 0.0 <= v <= 100.0

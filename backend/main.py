@@ -17,7 +17,9 @@ from gemini_service import generate_ai_poster
 from ai_analyst import ai_analyst
 from intelligence.orchestrator import IntelligenceOrchestrator
 from intelligence.utils import classify_style
-from fighter_profile import build_profile_extension, build_history  # FTR-01B1 read-model (read-only)
+from fighter_profile import (  # FTR-01B1 read-model (read-only)
+    build_profile_extension, build_history, guard_extension, sanitize_raw_stats, json_safe,
+)
 
 # ── Structured logging (JSON, stdlib — no extra deps) ────────────────────────
 # LOG_LEVEL env var controls verbosity (default: INFO).
@@ -501,6 +503,12 @@ async def get_fighter_profile(fighter_name: str):
             detail=f"No stats found for '{matched_name}'"
         )
 
+    # FTR-01B1-R1: neutralise non-finite/malformed legacy inputs at the boundary
+    # (a NaN/inf would otherwise make the JSON encoder fail with HTTP 500).
+    raw_stats, corrupted_legacy_fields = sanitize_raw_stats(raw_stats)
+    if corrupted_legacy_fields:
+        log.warning("profile_corrupt_legacy_values fighter=%r fields=%s", matched_name, corrupted_legacy_fields)
+
     weight = float(raw_stats.get('fighter_weight_lbs', 185) or 185)
 
     stats = {
@@ -598,18 +606,15 @@ async def get_fighter_profile(fighter_name: str):
 
     # FTR-01B1: additive availability-aware objects.  Legacy `stats` and
     # `intelligence` above are intentionally unchanged (see data_quality.legacy_compat).
-    extension = None
-    try:
-        if engine is not None:
-            extension = build_profile_extension(engine, matched_name)
-    except Exception:
-        log.warning("profile_extension_failed", exc_info=True)
-    extension = extension or {"data_quality": None, "scores": None}
+    extension = guard_extension(build_profile_extension, engine, matched_name, log)
+    if isinstance(extension["data_quality"], dict):
+        extension["data_quality"]["legacy_corrupted_fields"] = corrupted_legacy_fields
 
-    return {
+    return json_safe({
         "name": matched_name,
         "data_quality": extension["data_quality"],
         "scores": extension["scores"],
+        "extension_status": extension["extension_status"],
         "stats": convert_numpy(stats),
         "intelligence": {
             "style": style_val,
@@ -620,7 +625,7 @@ async def get_fighter_profile(fighter_name: str):
             "mirage_meter": mirage_meter,
             "scores_source": "computed" if scores_are_stored else "heuristic",
         },
-    }
+    })
 
 
 @app.get("/fighter/{fighter_name}/history")
@@ -629,7 +634,8 @@ async def get_fighter_history(fighter_name: str):
     Return the last 20 fights for a fighter in reverse chronological order.
 
     Uses fuzzy name matching (search_fighter) when predictor is loaded.
-    Each fight includes: opponent, date, result (W/L), method, weight_class.
+    Each fight includes: opponent, date, result (W/L/D/NC/UNKNOWN), method, weight_class.
+    result_counts / methods_available_fraction describe these (latest 20) rows only.
     """
     if engine is None:
         raise HTTPException(status_code=500, detail="Database not initialized")

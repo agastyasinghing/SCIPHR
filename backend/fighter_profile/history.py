@@ -1,13 +1,15 @@
 """
-Fight-history result semantics (FTR-01B1).
+Fight-history result semantics (FTR-01B1, corrected in FTR-01B1-R1).
 
-Pure function.  Never maps "not a win" to a loss.
+Pure function.  Never maps "not a win" to a loss.  Names are compared after
+whitespace/case normalisation; display names are never altered.
 
     W        the fighter is the recorded winner
     L        the *opponent* is the recorded winner
     D        the bout is recorded as a draw
     NC       the bout is recorded as a no contest
-    UNKNOWN  winner missing, or not attributable to either corner
+    UNKNOWN  winner missing, not attributable to either corner, or the
+             fighter does not match either corner
 
 The database currently contains no draw rows and one No Contest row
 (winner == "No Contest"); methods are all NULL until FTR-01B2.
@@ -24,17 +26,28 @@ _DRAW = {"draw", "d", "majority draw", "split draw", "technical draw"}
 _NC = {"no contest", "nc", "n/c", "no-contest"}
 
 
+def norm_name(s: Optional[str]) -> str:
+    """Collapse internal whitespace, strip, casefold.  For comparison only."""
+    return " ".join((s or "").split()).casefold()
+
+
 def classify_result(fighter: str, r_name: str, b_name: str, winner: Optional[str]) -> str:
-    w = (winner or "").strip()
+    w = norm_name(winner)
     if not w:
         return RESULT_UNKNOWN
-    if w.lower() in _DRAW:
+    if w in _DRAW:
         return RESULT_D
-    if w.lower() in _NC:
+    if w in _NC:
         return RESULT_NC
-    if w == fighter:
+    f, r, b = norm_name(fighter), norm_name(r_name), norm_name(b_name)
+    if f == r:
+        opponent = b
+    elif f == b:
+        opponent = r
+    else:
+        return RESULT_UNKNOWN
+    if w == f:
         return RESULT_W
-    opponent = b_name if r_name == fighter else r_name
     if w == opponent:
         return RESULT_L
     return RESULT_UNKNOWN

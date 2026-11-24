@@ -69,11 +69,17 @@ def test_complete_striking_profile_all_measured():
 
 
 class TestMeasuredZero:
-    def test_zero_submission_and_takedown_rates_stay_zero(self):
-        f = build_fields(_row(sub_avg=0.0, td_avg=0.0, td_acc=0.0))
+    def test_zero_submission_rate_stays_a_measured_zero(self):
+        f = build_fields(_row(sub_avg=0.0))
         assert f["sub_avg"]["value"] == 0.0 and f["sub_avg"]["status"] == "measured_zero"
-        assert f["td_avg"]["value"] == 0.0 and f["td_avg"]["status"] == "measured_zero"
-        assert is_usable(f["sub_avg"]) and is_usable(f["td_avg"])
+        assert is_usable(f["sub_avg"])
+
+    def test_isolated_zero_takedown_rate_is_ambiguous_not_measured(self):
+        f = build_fields(_row(td_avg=0.0, td_acc=0.0))
+        assert f["td_avg"]["value"] == 0.0                      # literal zero preserved
+        assert f["td_avg"]["status"] == "ambiguous"
+        assert f["td_avg"]["basis"] == "ambiguous_source_zero"
+        assert not is_usable(f["td_avg"])
 
     def test_td_acc_not_declared_undefined_from_td_avg_zero(self):
         f = build_fields(_row(td_avg=0.0, td_acc=0.0))
@@ -81,9 +87,10 @@ class TestMeasuredZero:
         assert f["td_acc"]["value"] == 0.0
         assert f["td_acc"]["basis"] == "ambiguous_source_zero"
 
-    def test_td_acc_zero_with_takedowns_is_measured_zero(self):
+    def test_td_acc_zero_with_takedowns_is_conservatively_ambiguous(self):
         f = build_fields(_row(td_avg=1.0, td_acc=0.0))
-        assert f["td_acc"]["status"] == "measured_zero"
+        assert f["td_acc"]["status"] == "ambiguous" and not is_usable(f["td_acc"])
+        assert f["td_avg"]["status"] == "measured"
 
     def test_single_zero_in_populated_block_does_not_unavailable_the_block(self):
         f = build_fields(_row(sub_avg=0.0))
