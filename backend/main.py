@@ -20,8 +20,8 @@ from intelligence.utils import classify_style
 from sqlalchemy.exc import SQLAlchemyError
 from fighter_profile import (  # FTR-01B1 read-model (read-only)
     build_profile_extension, build_history, guard_extension, sanitize_raw_stats, json_safe,
-    read_legacy_raw_stats, assess_raw_inputs, assess_stored_scores, build_legacy_integrity,
-    fetch_fight_rows, participant_identity,
+    inspect_legacy_raw_stats, assess_raw_inputs, assess_stored_scores, build_legacy_integrity,
+    attribute_fights,
 )
 
 # ── Structured logging (JSON, stdlib — no extra deps) ────────────────────────
@@ -498,18 +498,24 @@ async def get_fighter_profile(fighter_name: str):
             detail=f"Fighter '{fighter_name}' not found"
         )
 
-    # FTR-01B1-R2: the shared calculator coerces with float() and raises on a
-    # malformed stored number.  Only that coercion failure is caught here; the
-    # profile-only reader (which cannot raise on malformed numbers) takes over.
-    # Database/connection errors are NOT caught and still surface as failures.
+    # FTR-01B1-R2/R3: the shared calculator coerces with float() and raises on a
+    # malformed stored number.  On ValueError/TypeError the profile-only reader
+    # inspects the stored row (SELECT only) and we recover ONLY if it finds a stored
+    # value that float() cannot convert - evidence that explains the failure.  Without
+    # that evidence the original exception is re-raised (it is a real bug, not data).
+    # Database/connection errors are never caught and still surface as failures.
     malformed_keys: list = []
     try:
         raw_stats = predictor.feature_calculator.get_latest_fighter_stats(matched_name)
     except (ValueError, TypeError):
         if engine is None:
             raise
-        log.warning("profile_raw_stats_fallback fighter=%r", matched_name)
-        raw_stats, malformed_keys = read_legacy_raw_stats(engine, matched_name)
+        inspection = inspect_legacy_raw_stats(engine, matched_name)
+        if not inspection["coercion_failures"]:
+            raise
+        log.warning("profile_raw_stats_fallback fighter=%r fields=%s",
+                    matched_name, inspection["coercion_failures"])
+        raw_stats, malformed_keys = inspection["raw"], inspection["malformed"]
 
     if not raw_stats:
         raise HTTPException(
@@ -687,18 +693,18 @@ async def get_fighter_history(fighter_name: str):
         if matched:
             fighter_name = matched
 
-    # FTR-01B1-R2: participant matching is whitespace/case-normalised (same rule as the
-    # profile coverage query); stored display names are preserved.
+    # FTR-01B1-R2/R3: participant matching is whitespace/case-normalised, with ONE shared
+    # attribution policy (also used by profile coverage): when two fighter records share a
+    # normalised name only exactly-named bouts are attributed and the rest are withheld.
     with engine.connect() as conn:
-        all_rows = fetch_fight_rows(conn, fighter_name)
-        identity = participant_identity(conn, fighter_name, all_rows)
-    rows = all_rows[:20]
+        attribution = attribute_fights(conn, fighter_name)
+    rows = attribution.rows[:20]
 
-    if not rows:
+    if not rows and not attribution.withheld_ambiguous:
         raise HTTPException(status_code=404, detail=f"No fight history found for '{fighter_name}'")
 
     # FTR-01B1: result is W/L/D/NC/UNKNOWN (never "not a win" == loss); additive metadata.
-    payload = build_history(fighter_name, rows, identity)
+    payload = build_history(fighter_name, rows, attribution)
     return {"name": fighter_name, "count": len(payload["fights"]), **payload}
 
 

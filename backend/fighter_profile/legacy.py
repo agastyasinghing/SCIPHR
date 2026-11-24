@@ -76,23 +76,40 @@ def _finite(v: Any) -> Optional[float]:
     return f if math.isfinite(f) else None
 
 
-def read_legacy_raw_stats(engine, name: str) -> tuple[dict, list[str]]:
+def _unconvertible(v: Any) -> bool:
+    """True when ``float(v)`` itself raises - i.e. the shared calculator's
+    ``float(x or 0)`` would fail on it (non-numeric text, not NaN/inf)."""
+    if not v:
+        return False
+    try:
+        float(v)
+    except (TypeError, ValueError, OverflowError):
+        return True
+    return False
+
+
+def inspect_legacy_raw_stats(engine, name: str) -> dict:
     """
     Profile-only equivalent of ``get_latest_fighter_stats`` that cannot raise on
-    malformed numbers.  Returns (raw, malformed_keys); ``({}, [])`` when the
-    fighter row does not exist.  Valid values are coerced exactly as the shared
-    calculator does (``float(x or 0)``; weight default 185); a malformed or
-    non-finite value becomes ``None`` and its legacy key is reported.
+    malformed numbers.  Returns
+        {"found": bool, "raw": {...}, "malformed": [legacy keys],
+         "coercion_failures": [legacy keys for which float() raises]}.
+    Valid values are coerced exactly as the shared calculator does
+    (``float(x or 0)``; weight default 185); a malformed or non-finite value
+    becomes ``None`` and its legacy key is reported in ``malformed``.
+    ``coercion_failures`` is the subset that would make the shared calculator
+    raise - the only evidence that justifies recovering from its exception.
 
     Only database errors can raise here (and they must propagate).
     """
     with engine.connect() as conn:
         row = conn.execute(_RAW_SQL, {"name": name}).fetchone()
     if row is None:
-        return {}, []
+        return {"found": False, "raw": {}, "malformed": [], "coercion_failures": []}
     m = row._mapping
     raw: dict = {}
     malformed: list[str] = []
+    failures: list[str] = []
     for col, key in _COLUMN_TO_RAW.items():
         v = m.get(col)
         default = 185.0 if col == "weight_lbs" else 0.0
@@ -103,10 +120,19 @@ def read_legacy_raw_stats(engine, name: str) -> tuple[dict, list[str]]:
         if f is None:
             raw[key] = None
             malformed.append(key)
+            if _unconvertible(v):
+                failures.append(key)
         else:
             raw[key] = f
     raw["knockdowns"] = 0.0             # not stored (same hard-coded legacy value)
-    return raw, sorted(malformed)
+    return {"found": True, "raw": raw, "malformed": sorted(malformed),
+            "coercion_failures": sorted(failures)}
+
+
+def read_legacy_raw_stats(engine, name: str) -> tuple[dict, list[str]]:
+    """(raw, malformed_keys); ``({}, [])`` when the fighter row does not exist."""
+    r = inspect_legacy_raw_stats(engine, name)
+    return r["raw"], r["malformed"]
 
 
 def assess_raw_inputs(raw: dict) -> tuple[dict, list[dict]]:

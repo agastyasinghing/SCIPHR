@@ -166,7 +166,7 @@ class TestMalformedPersistedInputs:
 
         def down(*a, **k):
             raise OperationalError("SELECT 1", {}, Exception("connection refused"))
-        monkeypatch.setattr(app_module, "read_legacy_raw_stats", down)
+        monkeypatch.setattr(app_module, "inspect_legacy_raw_stats", down)
         r = c.get("/fighter/Junk F")
         assert r.status_code == 500 and "stats" not in r.text
 

@@ -53,5 +53,32 @@ def classify_result(fighter: str, r_name: str, b_name: str, winner: Optional[str
     return RESULT_UNKNOWN
 
 
+def classify_result_exact(fighter: str, r_name: str, b_name: str, winner: Optional[str]) -> str:
+    """
+    Identity-collision mode (two fighters share a normalised name): names are
+    compared EXACTLY, so a variant spelling never resolves to either fighter.
+    Draw / No Contest / missing winner are classified as usual.
+    """
+    w = (winner or "")
+    wn = norm_name(w)
+    if not wn:
+        return RESULT_UNKNOWN
+    if wn in _DRAW:
+        return RESULT_D
+    if wn in _NC:
+        return RESULT_NC
+    if fighter == r_name:
+        opponent = b_name
+    elif fighter == b_name:
+        opponent = r_name
+    else:
+        return RESULT_UNKNOWN
+    if w == fighter:
+        return RESULT_W
+    if w == opponent:
+        return RESULT_L
+    return RESULT_UNKNOWN
+
+
 def summarize(results: list[str]) -> dict:
     return {code: sum(1 for r in results if r == code) for code in RESULT_CODES}

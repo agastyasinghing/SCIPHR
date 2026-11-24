@@ -13,9 +13,10 @@ named ``fighter_profile``.
 
 from .service import (  # noqa: F401
     build_profile_extension, build_history, read_profile_inputs, guard_extension, validate_extension,
-    ExtensionValidationError, fetch_fight_rows, participant_identity,
+    ExtensionValidationError, fetch_fight_rows,
 )
 from .legacy import (  # noqa: F401
-    read_legacy_raw_stats, assess_raw_inputs, assess_stored_scores, build_legacy_integrity,
+    read_legacy_raw_stats, inspect_legacy_raw_stats, assess_raw_inputs, assess_stored_scores, build_legacy_integrity,
 )
+from .attribution import attribute_fights, Attribution  # noqa: F401
 from .sanitize import sanitize_raw_stats, json_safe  # noqa: F401

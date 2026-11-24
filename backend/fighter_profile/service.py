@@ -18,6 +18,7 @@ from typing import Optional
 from sqlalchemy import text
 
 from . import availability, history as hist, scores as scores_mod
+from .attribution import Attribution, attribute_fights, participant_key, _FIGHTS_SQL  # noqa: F401
 
 HISTORY_LIMIT = 20  # must match the LIMIT in main.get_fighter_history
 
@@ -29,21 +30,6 @@ _FIGHTER_SQL = text(
     "FROM fighters WHERE name = :name"
 )
 
-def _norm_sql(col: str) -> str:
-    """Portable (SQLite + PostgreSQL) name normalisation: trim, lower-case, and
-    collapse runs of up to 8 spaces.  Tabs, newlines, NBSP and non-ASCII case
-    folding are NOT handled in SQL (documented limitation); candidates are
-    re-checked in Python with ``history.norm_name`` (full whitespace + casefold)."""
-    return f"LOWER(TRIM(REPLACE(REPLACE(REPLACE({col}, '  ', ' '), '  ', ' '), '  ', ' ')))"
-
-
-_FIGHTS_SQL = text(
-    "SELECT r_name, b_name, date, winner, method, weight_class FROM fights "
-    f"WHERE {_norm_sql('r_name')} = :key OR {_norm_sql('b_name')} = :key ORDER BY date DESC"
-)
-_FIGHTER_NAME_COUNT_SQL = text(
-    f"SELECT COUNT(*) FROM fighters WHERE {_norm_sql('name')} = :key"
-)
 _DATASET_END_SQL = text("SELECT MAX(date) FROM fights")
 
 # Documented compatibility problems in the legacy `intelligence` object,
@@ -60,36 +46,10 @@ LEGACY_COMPAT = {
 }
 
 
-def participant_key(name: str) -> str:
-    """SQL-side comparison key: whitespace-collapsed, lower-case (ASCII-safe)."""
-    return " ".join((name or "").split()).lower()
-
-
 def fetch_fight_rows(conn, name: str, limit: Optional[int] = None) -> list:
-    """
-    Fights in which ``name`` took part, newest first.
-
-    SQL narrows candidates with a portable normalised equality (never LIKE /
-    substring / fuzzy matching); Python then confirms with the full
-    ``norm_name`` comparison.  Original stored names are preserved in the rows.
-    """
-    target = hist.norm_name(name)
-    rows = [r for r in conn.execute(_FIGHTS_SQL, {"key": participant_key(name)}).fetchall()
-            if hist.norm_name(r.r_name) == target or hist.norm_name(r.b_name) == target]
+    """Bouts safely attributed to ``name`` (see attribution.py), newest first."""
+    rows = attribute_fights(conn, name).rows
     return rows[:limit] if limit else rows
-
-
-def participant_identity(conn, name: str, rows: list) -> dict:
-    """How the name matched: stored spellings, and whether the key is ambiguous."""
-    target = hist.norm_name(name)
-    spellings = sorted({n for r in rows for n in (r.r_name, r.b_name)
-                        if hist.norm_name(n) == target})
-    matching = conn.execute(_FIGHTER_NAME_COUNT_SQL, {"key": participant_key(name)}).scalar() or 0
-    return {
-        "stored_spellings": spellings,
-        "fighter_rows_matching_name": int(matching),
-        "ambiguous_identity": int(matching) > 1,
-    }
 
 
 def _to_date(v) -> Optional[_dt.date]:
@@ -115,21 +75,28 @@ def read_profile_inputs(engine, name: str) -> Optional[dict]:
         row = conn.execute(_FIGHTER_SQL, {"name": name}).fetchone()
         if row is None:
             return None
-        fights = fetch_fight_rows(conn, name)
+        attribution = attribute_fights(conn, name)
         dataset_end = conn.execute(_DATASET_END_SQL).scalar()
     return {
         "row": dict(row._mapping),
-        "fights": [dict(f._mapping) for f in fights],
+        "fights": [dict(f._mapping) for f in attribution.rows],
+        "attribution": attribution,
         "dataset_end": _to_date(dataset_end),
     }
 
 
 def build_coverage(name: str, inputs: dict) -> dict:
     fights = inputs["fights"]
+    att = inputs.get("attribution")
+    unattributable = att is not None and att.status == "ambiguous_unattributable"
     dates = sorted(d for d in (_to_date(f["date"]) for f in fights) if d)
     with_method = sum(1 for f in fights if (f.get("method") or "").strip())
     return {
-        "ufc_fights_in_dataset": len(fights),
+        # None (never 0) when bouts exist but none can be attributed reliably.
+        "ufc_fights_in_dataset": None if unattributable else len(fights),
+        "coverage_verified": True if att is None else att.coverage_verified,
+        "identity_status": "unique" if att is None else att.status,
+        "withheld_ambiguous_bouts": 0 if att is None else att.withheld_ambiguous,
         "first_dataset_fight": _iso(dates[0]) if dates else None,
         "last_dataset_fight": _iso(dates[-1]) if dates else None,
         "snapshot_date": _iso(_to_date(inputs["row"].get("last_fight_date"))),
@@ -163,7 +130,7 @@ def build_profile_extension(engine, name: str) -> Optional[dict]:
     return {"data_quality": data_quality, "scores": scores_mod.build_scores(fields)}
 
 
-def build_history(fighter_name: str, rows, identity: Optional[dict] = None) -> dict:
+def build_history(fighter_name: str, rows, attribution: Optional[Attribution] = None) -> dict:
     """
     Fight history rows -> additive history payload.  ``rows`` need r_name,
     b_name, date, winner, method, weight_class.  Never infers a method.
@@ -171,12 +138,14 @@ def build_history(fighter_name: str, rows, identity: Optional[dict] = None) -> d
     returned (the latest HISTORY_LIMIT bouts), not necessarily the whole career.
     """
     history, codes = [], []
+    exact = bool(attribution and attribution.exact_mode)
+    classify = hist.classify_result_exact if exact else hist.classify_result
     for row in rows:
         r_name, b_name = row.r_name, row.b_name
-        result = hist.classify_result(fighter_name, r_name, b_name, row.winner)
+        result = classify(fighter_name, r_name, b_name, row.winner)
         codes.append(result)
         method = (row.method or "").strip()      # whitespace-only -> ""
-        is_red = hist.norm_name(r_name) == hist.norm_name(fighter_name)
+        is_red = (r_name == fighter_name) if exact else (hist.norm_name(r_name) == hist.norm_name(fighter_name))
         history.append({
             "opponent": b_name if is_red else r_name,
             "date": str(row.date),
@@ -195,37 +164,49 @@ def build_history(fighter_name: str, rows, identity: Optional[dict] = None) -> d
             "rows_returned": len(history),
             "may_be_truncated": len(history) >= HISTORY_LIMIT,
             "applies_to": ["result_counts", "methods_available_fraction"],
+            "coverage_verified": True if attribution is None else attribution.coverage_verified,
+            "withheld_ambiguous_bouts": 0 if attribution is None else attribution.withheld_ambiguous,
         },
         "history_note": "Methods are unavailable until the source repair (FTR-01B2); empty means unknown, not decision.",
     }
-    if identity is not None:
-        out["name_match"] = identity
+    if attribution is not None:
+        out["name_match"] = attribution.identity_meta()
     return out
 
 
 # ── Extension validation + guard ────────────────────────────────────────────
 class ExtensionValidationError(ValueError):
     """The extension payload violates the documented contract (=> INVALID_SHAPE).
-    Distinct from any exception raised by the builder itself (=> ERROR)."""
+    Distinct from any exception raised by the builder itself (=> ERROR).
+
+    ``code`` is a fixed reason string and ``where`` an allowlisted identifier
+    (taken only from this module's constants, never from the payload), so both
+    are safe to log.  The exception message never contains payload contents."""
+
+    def __init__(self, code: str, where: str = ""):
+        super().__init__(code)
+        self.code = code
+        self.where = where
 
 
 _REQUIRED_FIELDS = (
     "wins", "losses", "draws", "age", "height_cm", "reach_cm", "weight_lbs", "slpm", "str_acc",
     "str_def", "td_avg", "td_acc", "td_def", "sub_avg", "career_knockdowns",
 )
-_STATUSES = {s_.value for s_ in availability.Status}
-_BASES = {b_.value for b_ in availability.Basis}
+_STATUSES = frozenset(s_.value for s_ in availability.Status)
+_BASES = frozenset(b_.value for b_ in availability.Basis)
 _SCORE_NAMES = ("composite", "aura", "chaos_contribution", "mirage")
-_SCORE_STATUSES = {"provisional", "unavailable"}
-_BLOCK_STATUSES = {"complete", "partial", "unavailable"}
+_SCORE_STATUSES = frozenset({"provisional", "unavailable"})
+_BLOCK_STATUSES = frozenset({"complete", "partial", "unavailable"})
 _COVERAGE_KEYS = (
     "ufc_fights_in_dataset", "first_dataset_fight", "last_dataset_fight", "snapshot_date",
     "dataset_end", "methods_available_fraction", "record_scope", "record_as_of",
+    "coverage_verified", "identity_status",
 )
 
 
-def _bad(msg: str):
-    raise ExtensionValidationError(msg)
+def _bad(code: str, where: str = ""):
+    raise ExtensionValidationError(code, where)
 
 
 def _is_num(v) -> bool:
@@ -233,93 +214,113 @@ def _is_num(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
-def _no_nonfinite(obj, path="ext"):
+def _enum_ok(v, allowed) -> bool:
+    """Type-check BEFORE membership: unhashable / non-string values are simply invalid."""
+    return isinstance(v, str) and v in allowed
+
+
+def _no_nonfinite(obj):
+    """Reject NaN/inf anywhere.  Never reports the path (payload keys are untrusted)."""
     import math
     if isinstance(obj, dict):
-        for k, v in obj.items():
-            _no_nonfinite(v, f"{path}.{k}")
+        for v in obj.values():
+            _no_nonfinite(v)
     elif isinstance(obj, (list, tuple)):
-        for i, v in enumerate(obj):
-            _no_nonfinite(v, f"{path}[{i}]")
+        for v in obj:
+            _no_nonfinite(v)
     elif isinstance(obj, float) and not math.isfinite(obj):
-        _bad(f"non-finite number at {path}")
+        _bad("NON_FINITE_NUMBER")
 
 
 def validate_extension(ext) -> None:
     """
     Validate the documented ``data_quality`` / ``scores`` contract.  Bounded:
-    required keys, enum values, types, and value/availability consistency.
-    Raises ExtensionValidationError.
+    required keys, enum values (type-checked first), types, and value /
+    availability consistency.  Raises ExtensionValidationError only.
     """
     if not isinstance(ext, dict):
-        _bad("extension is not an object")
+        _bad("EXTENSION_NOT_OBJECT")
     _no_nonfinite(ext)
     dq, sc = ext.get("data_quality"), ext.get("scores")
 
     # data_quality
     if not isinstance(dq, dict):
-        _bad("data_quality missing")
+        _bad("DATA_QUALITY_MISSING")
     for k in ("schema", "fields", "core_stat_block", "coverage", "legacy_compat"):
         if k not in dq:
-            _bad(f"data_quality.{k} missing")
+            _bad("DATA_QUALITY_KEY_MISSING", k)
     if not isinstance(dq["schema"], str) or not isinstance(dq["legacy_compat"], dict):
-        _bad("data_quality.schema/legacy_compat malformed")
+        _bad("DATA_QUALITY_SCHEMA_MALFORMED")
     fields = dq["fields"]
     if not isinstance(fields, dict):
-        _bad("data_quality.fields malformed")
+        _bad("FIELDS_MALFORMED")
     for name in _REQUIRED_FIELDS:
         f = fields.get(name)
         if not isinstance(f, dict) or any(k not in f for k in ("value", "status", "basis", "unit")):
-            _bad(f"data_quality.fields.{name} malformed")
-        if f["status"] not in _STATUSES or f["basis"] not in _BASES:
-            _bad(f"data_quality.fields.{name} has unknown status/basis")
-        v, usable = f["value"], f["status"] in ("measured", "measured_zero")
-        if usable and not _is_num(v):
-            _bad(f"data_quality.fields.{name} is {f['status']} without a finite value")
-        if f["status"] in ("unavailable", "not_stored") and v is not None:
-            _bad(f"data_quality.fields.{name} is {f['status']} but has a value")
-        if f["status"] == "ambiguous" and v is not None and not _is_num(v):
-            _bad(f"data_quality.fields.{name} ambiguous value not finite")
+            _bad("FIELD_MALFORMED", name)
+        if not _enum_ok(f["status"], _STATUSES):
+            _bad("FIELD_STATUS_INVALID", name)
+        if not _enum_ok(f["basis"], _BASES):
+            _bad("FIELD_BASIS_INVALID", name)
+        v, status = f["value"], f["status"]
+        if status in ("measured", "measured_zero") and not _is_num(v):
+            _bad("FIELD_MEASURED_WITHOUT_VALUE", name)
+        if status in ("unavailable", "not_stored") and v is not None:
+            _bad("FIELD_UNAVAILABLE_WITH_VALUE", name)
+        if status == "ambiguous" and v is not None and not _is_num(v):
+            _bad("FIELD_AMBIGUOUS_VALUE_INVALID", name)
     blk = dq["core_stat_block"]
-    if (not isinstance(blk, dict) or blk.get("status") not in _BLOCK_STATUSES
+    if (not isinstance(blk, dict) or not _enum_ok(blk.get("status"), _BLOCK_STATUSES)
             or not isinstance(blk.get("available"), bool)
             or blk["available"] != (blk["status"] == "complete")
             or not isinstance(blk.get("usable_fields"), list)
             or not isinstance(blk.get("unconfirmed_fields"), list)
             or not isinstance(blk.get("invalid_fields"), list)):
-        _bad("data_quality.core_stat_block malformed")
+        _bad("CORE_BLOCK_MALFORMED")
     cov = dq["coverage"]
     if not isinstance(cov, dict) or any(k not in cov for k in _COVERAGE_KEYS):
-        _bad("data_quality.coverage malformed")
+        _bad("COVERAGE_MALFORMED")
     n = cov["ufc_fights_in_dataset"]
-    if not isinstance(n, int) or isinstance(n, bool) or n < 0:
-        _bad("data_quality.coverage.ufc_fights_in_dataset invalid")
+    if not isinstance(cov["coverage_verified"], bool):
+        _bad("COVERAGE_VERIFIED_INVALID")
+    if n is None:
+        if cov["coverage_verified"]:
+            _bad("COVERAGE_NULL_COUNT_VERIFIED")      # a missing count can never be "verified"
+    elif not isinstance(n, int) or isinstance(n, bool) or n < 0:
+        _bad("COVERAGE_COUNT_INVALID")
     frac = cov["methods_available_fraction"]
     if frac is not None and not (_is_num(frac) and 0.0 <= frac <= 1.0):
-        _bad("data_quality.coverage.methods_available_fraction invalid")
+        _bad("COVERAGE_FRACTION_INVALID")
     for k in ("first_dataset_fight", "last_dataset_fight", "snapshot_date", "dataset_end"):
         if cov[k] is not None and not isinstance(cov[k], str):
-            _bad(f"data_quality.coverage.{k} invalid")
+            _bad("COVERAGE_DATE_INVALID", k)
 
     # scores
     if not isinstance(sc, dict) or not isinstance(sc.get("meta"), dict):
-        _bad("scores.meta missing")
+        _bad("SCORES_META_MISSING")
     for name in _SCORE_NAMES:
         o = sc.get(name)
         if not isinstance(o, dict) or any(k not in o for k in ("value", "available", "status", "reason")):
-            _bad(f"scores.{name} malformed")
-        if not isinstance(o["available"], bool) or o["status"] not in _SCORE_STATUSES:
-            _bad(f"scores.{name}.available/status invalid")
+            _bad("SCORE_MALFORMED", name)
+        if not isinstance(o["available"], bool):
+            _bad("SCORE_AVAILABLE_INVALID", name)
+        if not _enum_ok(o["status"], _SCORE_STATUSES):
+            _bad("SCORE_STATUS_INVALID", name)
         if o["available"]:
             if not _is_num(o["value"]) or not 0.0 <= o["value"] <= 100.0:
-                _bad(f"scores.{name} is available without a finite 0-100 value")
+                _bad("SCORE_AVAILABLE_WITHOUT_VALID_VALUE", name)
             if o["status"] != "provisional":
-                _bad(f"scores.{name} available but status != provisional")
+                _bad("SCORE_AVAILABLE_STATUS_MISMATCH", name)
         else:
             if o["value"] is not None:
-                _bad(f"scores.{name} is unavailable but has a value")
+                _bad("SCORE_UNAVAILABLE_WITH_VALUE", name)
             if o["status"] != "unavailable" or not isinstance(o["reason"], str) or not o["reason"]:
-                _bad(f"scores.{name} unavailable without status/reason")
+                _bad("SCORE_UNAVAILABLE_WITHOUT_REASON", name)
+
+
+def _invalid_shape():
+    return {"data_quality": None, "scores": None,
+            "extension_status": {"available": False, "reason": "INVALID_SHAPE"}}
 
 
 def guard_extension(builder, engine, name: str, logger) -> dict:
@@ -329,10 +330,12 @@ def guard_extension(builder, engine, name: str, logger) -> dict:
     Returns {"data_quality", "scores", "extension_status"}.  Failures give null
     objects and ``extension_status.reason``:
         NOT_FOUND      the builder reported no such fighter row
-        INVALID_SHAPE  the payload violated the contract (validator rejected it)
+        INVALID_SHAPE  the payload violated the contract (validator rejected it,
+                       including any malformed-data exception inside validation)
         ERROR          the builder (or engine access) raised, including ValueError
-    Legacy scores are never substituted.  Logs carry the fighter name and the
-    exception *type* only (no message, no traceback, no connection string).
+    Legacy scores are never substituted.  Logs contain only the fighter name,
+    fixed reason codes, allowlisted identifiers and exception *type names* -
+    never payload contents, payload keys, exception messages or SQL/URLs.
     """
     try:
         if engine is None:
@@ -349,8 +352,12 @@ def guard_extension(builder, engine, name: str, logger) -> dict:
     try:
         validate_extension(ext)
     except ExtensionValidationError as exc:
-        logger.warning("profile_extension_invalid_shape fighter=%r detail=%s", name, str(exc)[:120])
-        return {"data_quality": None, "scores": None,
-                "extension_status": {"available": False, "reason": "INVALID_SHAPE"}}
+        logger.warning("profile_extension_invalid_shape fighter=%r code=%s where=%s",
+                       name, exc.code, exc.where or "-")
+        return _invalid_shape()
+    except Exception as exc:  # noqa: BLE001 - malformed data must never escape the validation boundary
+        logger.warning("profile_extension_invalid_shape fighter=%r code=VALIDATION_FAULT error=%s",
+                       name, type(exc).__name__)
+        return _invalid_shape()
     return {"data_quality": ext["data_quality"], "scores": ext["scores"],
             "extension_status": {"available": True, "reason": None}}
