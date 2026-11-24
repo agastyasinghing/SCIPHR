@@ -17,6 +17,7 @@ from gemini_service import generate_ai_poster
 from ai_analyst import ai_analyst
 from intelligence.orchestrator import IntelligenceOrchestrator
 from intelligence.utils import classify_style
+from fighter_profile import build_profile_extension, build_history  # FTR-01B1 read-model (read-only)
 
 # ── Structured logging (JSON, stdlib — no extra deps) ────────────────────────
 # LOG_LEVEL env var controls verbosity (default: INFO).
@@ -594,8 +595,21 @@ async def get_fighter_profile(fighter_name: str):
     )
 
     scores_are_stored = stored and stored.aura_score is not None
+
+    # FTR-01B1: additive availability-aware objects.  Legacy `stats` and
+    # `intelligence` above are intentionally unchanged (see data_quality.legacy_compat).
+    extension = None
+    try:
+        if engine is not None:
+            extension = build_profile_extension(engine, matched_name)
+    except Exception:
+        log.warning("profile_extension_failed", exc_info=True)
+    extension = extension or {"data_quality": None, "scores": None}
+
     return {
         "name": matched_name,
+        "data_quality": extension["data_quality"],
+        "scores": extension["scores"],
         "stats": convert_numpy(stats),
         "intelligence": {
             "style": style_val,
@@ -644,18 +658,9 @@ async def get_fighter_history(fighter_name: str):
     if not rows:
         raise HTTPException(status_code=404, detail=f"No fight history found for '{fighter_name}'")
 
-    history = []
-    for row in rows:
-        opponent = row.b_name if row.r_name == fighter_name else row.r_name
-        history.append({
-            "opponent": opponent,
-            "date": str(row.date),
-            "result": "W" if row.winner == fighter_name else "L",
-            "method": row.method or "",
-            "weight_class": row.weight_class or "",
-        })
-
-    return {"name": fighter_name, "fights": history, "count": len(history)}
+    # FTR-01B1: result is W/L/D/NC/UNKNOWN (never "not a win" == loss); additive metadata.
+    payload = build_history(fighter_name, rows)
+    return {"name": fighter_name, "count": len(payload["fights"]), **payload}
 
 
 @app.get("/events/{event_id}/card-predictions")
