@@ -55,7 +55,38 @@ The shared `GoldenFeatureCalculator.get_latest_fighter_stats` (unchanged) raises
 
 **`intelligence.scores_source` is coarse legacy provenance**: one label for the whole object (`"computed"` only when a stored `aura_score` was present and valid and no stored score was corrupted, else `"heuristic"`). It is not per-score proof of where each value came from. Use `legacy_integrity` and `scores.*.provenance` for per-score information.
 
-## GET /fighter/{fighter_name}/history
+## Fighter identity resolution (R4 — both routes, before `search_fighter`)
+
+`GET /fighter/{name}` and `GET /fighter/{name}/history` resolve ONE stored fighter name
+(`fighter_profile.resolve_fighter_identity`) before the predictor's case-insensitive
+first-match `search_fighter()` is consulted. `search_fighter()` itself is unchanged and
+still serves prediction. Policy, in order:
+
+1. **Exact precedence.** The request (URL-decoded, trimmed/validated as before) is compared
+   to stored names by Python string equality (case and internal spaces count; the SQL
+   result is re-checked in Python). Exactly one exact fighter wins, even if other fighters
+   share its normalised name ("Case Twin" vs "CASE TWIN"; "Same Name" vs "Same  Name").
+2. **Unique normalised fallback.** With no exact match, the case/whitespace-normalised
+   candidates are used; exactly one is selected (`review red`, `  Review  Red  `).
+3. **Ambiguity → HTTP 409.** More than one normalised candidate and no exact match never
+   selects the first one:
+   `{"detail": {"code": "AMBIGUOUS_FIGHTER_IDENTITY", "candidates": ["Same  Name", "Same Name"]}}`
+   (actual stored names, sorted; no profile/history payload, no attribution is attempted).
+4. **Fuzzy compatibility.** Otherwise the existing fuzzy search runs, and its answer is
+   re-checked against the database identity candidates: a fuzzy result whose normalised
+   name is shared by several fighters is a 409, never a bypass; a result that is not a
+   stored fighter is unresolved.
+5. **Not found.** Unresolvable → 404 (history keeps its previous "no fight history" 404).
+6. **Failures.** A database error while resolving propagates (HTTP 500); it never falls
+   back to a first match.
+
+The resolved stored name is used for everything in the response: `name`, the calculator
+stats, the profile-only corrupted-data fallback, `data_quality`, `scores`, attribution,
+history result classification, coverage, and the stored `style` / `is_active` / legacy
+scores (`WHERE name = :name`, row name re-verified in Python — no `LOWER(name)` match, so
+one fighter's stored intelligence values are never mixed with another's).
+
+
 
 Preserved: `name`, `fights[].{opponent,date,result,method,weight_class}`, `count`. Added: `fights[].method_available`, `result_counts`, `methods_available_fraction`, `history_scope`, `name_match`, `history_note`.
 **Scope:** the endpoint returns the latest 20 bouts; `result_counts` and `methods_available_fraction` describe those returned rows only, not necessarily the whole career (`history_scope.window = latest_20_fights`, `may_be_truncated`).

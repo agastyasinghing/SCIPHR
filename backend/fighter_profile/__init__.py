@@ -19,4 +19,5 @@ from .legacy import (  # noqa: F401
     read_legacy_raw_stats, inspect_legacy_raw_stats, assess_raw_inputs, assess_stored_scores, build_legacy_integrity,
 )
 from .attribution import attribute_fights, Attribution  # noqa: F401
+from .identity import resolve_fighter_identity, AmbiguousFighterIdentity  # noqa: F401
 from .sanitize import sanitize_raw_stats, json_safe  # noqa: F401

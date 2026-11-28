@@ -394,10 +394,13 @@ class TestFallbackClassification:
 
     def test_missing_row_with_calculator_error_propagates(self, real_api):
         c = real_api([_fighter("Ghost S")])
-        app_module.predictor.search_fighter.side_effect = lambda n: n
+        # R4: identity is resolved against the fighters table first, so a name with no row is a
+        # 404 before the calculator runs; a resolved fighter with no unconvertible value and a
+        # calculator error is still a real bug (500).
         app_module.predictor.feature_calculator = MagicMock()
         app_module.predictor.feature_calculator.get_latest_fighter_stats.side_effect = ValueError("bug")
-        assert c.get("/fighter/Not In Table").status_code == 500
+        assert c.get("/fighter/Not In Table").status_code == 404
+        assert c.get("/fighter/Ghost S").status_code == 500
 
     def test_valid_profile_legacy_payload_unchanged(self, real_api):
         c = real_api([_fighter("Valid T")])

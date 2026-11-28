@@ -21,7 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from fighter_profile import (  # FTR-01B1 read-model (read-only)
     build_profile_extension, build_history, guard_extension, sanitize_raw_stats, json_safe,
     inspect_legacy_raw_stats, assess_raw_inputs, assess_stored_scores, build_legacy_integrity,
-    attribute_fights,
+    attribute_fights, resolve_fighter_identity, AmbiguousFighterIdentity,
 )
 
 # ── Structured logging (JSON, stdlib — no extra deps) ────────────────────────
@@ -481,6 +481,18 @@ async def get_fighters(
     return {"fighters": fighters, "count": len(fighters)}
 
 
+def _resolve_profile_identity(name: str):
+    """Shared profile/history identity resolution -> exact stored name | None | HTTP 409."""
+    fuzzy = predictor.search_fighter if predictor is not None else None
+    if engine is None:                                 # no DB identity available (legacy path)
+        return fuzzy(name) if fuzzy else None
+    try:
+        with engine.connect() as conn:
+            return resolve_fighter_identity(conn, name, fuzzy)
+    except AmbiguousFighterIdentity as exc:
+        raise HTTPException(status_code=409, detail=exc.detail())
+
+
 @app.get("/fighter/{fighter_name}")
 async def get_fighter_profile(fighter_name: str):
     """Get full profile for a specific fighter, including computed intelligence scores."""
@@ -490,7 +502,10 @@ async def get_fighter_profile(fighter_name: str):
     from urllib.parse import unquote
     fighter_name = _sanitize_fighter_name(unquote(fighter_name))
 
-    matched_name = predictor.search_fighter(fighter_name)
+    # FTR-01B1-R4: resolve the stored identity BEFORE the case-insensitive first-match
+    # predictor.search_fighter (exact > unique normalised > 409 on collision > checked fuzzy).
+    # The one resolved name is used for every lookup below.  DB errors propagate.
+    matched_name = _resolve_profile_identity(fighter_name)
 
     if not matched_name:
         raise HTTPException(
@@ -566,14 +581,16 @@ async def get_fighter_profile(fighter_name: str):
     try:
         if engine is not None:
             with engine.connect() as conn:
-                stored = conn.execute(
+                # FTR-01B1-R4: exact resolved identity; the row's name is re-checked in
+                # Python so no collation can mix another fighter's stored values in.
+                stored = next((r for r in conn.execute(
                     text(
-                        "SELECT style, is_active, aura_score, chaos_contribution, "
+                        "SELECT name, style, is_active, aura_score, chaos_contribution, "
                         "mirage_meter, composite_score "
-                        "FROM fighters WHERE LOWER(name) = LOWER(:name)"
+                        "FROM fighters WHERE name = :name"
                     ),
                     {"name": matched_name},
-                ).fetchone()
+                ).fetchall() if r.name == matched_name), None)
     except SQLAlchemyError:
         pass  # never block profile on a DB hiccup (legacy behaviour; programming errors still surface)
 
@@ -687,11 +704,11 @@ async def get_fighter_history(fighter_name: str):
     from urllib.parse import unquote
     fighter_name = _sanitize_fighter_name(unquote(fighter_name))
 
-    # Apply fuzzy match if predictor is ready; fall back to exact name otherwise
-    if predictor is not None:
-        matched = predictor.search_fighter(fighter_name)
-        if matched:
-            fighter_name = matched
+    # FTR-01B1-R4: same shared resolver as the profile route.  Unresolvable names keep the
+    # requested spelling (no fighter row -> attribution finds no/unique bouts -> 404 as before).
+    resolved = _resolve_profile_identity(fighter_name)
+    if resolved:
+        fighter_name = resolved
 
     # FTR-01B1-R2/R3: participant matching is whitespace/case-normalised, with ONE shared
     # attribution policy (also used by profile coverage): when two fighter records share a
