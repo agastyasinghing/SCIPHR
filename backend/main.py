@@ -484,8 +484,10 @@ async def get_fighters(
 def _resolve_profile_identity(name: str):
     """Shared profile/history identity resolution -> exact stored name | None | HTTP 409."""
     fuzzy = predictor.search_fighter if predictor is not None else None
-    if engine is None:                                 # no DB identity available (legacy path)
-        return fuzzy(name) if fuzzy else None
+    if engine is None:
+        # FTR-01B1-R5: fail closed.  Without the application DB identity cannot be verified;
+        # never fall back to the case-insensitive first-match predictor.search_fighter.
+        raise HTTPException(status_code=500, detail="Database not initialized")
     try:
         with engine.connect() as conn:
             return resolve_fighter_identity(conn, name, fuzzy)

@@ -254,3 +254,36 @@ class TestStoredScoreIsolation:
                    encoding="utf-8").read().upper()
         for word in ("INSERT ", "UPDATE ", "DELETE ", "DROP ", "ALTER "):
             assert word not in src.replace("SELECT-ONLY", "")
+
+
+# ═══ R5 — fail closed when the application engine is missing ═══════════════
+class TestMissingEngineFailsClosed:
+    PATHS = ("/fighter/Case%20Twin", "/fighter/Case%20Twin/history",
+             "/fighter/case%20twin", "/fighter/CASE%20TWIN")
+
+    def test_engine_none_is_500_with_no_fighter_data(self, api, engine):
+        c = _case_twins(api)
+        # predictor and its calculator connection stay alive; only main.engine is missing
+        assert app_module.predictor.feature_calculator.engine is engine
+        app_module.engine = None
+        for path in self.PATHS:
+            r = c.get(path)
+            assert r.status_code == 500, (path, r.text)
+            assert r.json() == {"detail": "Database not initialized"}
+            for leak in ("CASE TWIN", "Case Twin", "wins_total", "fights"):
+                assert leak not in r.text
+
+    def test_resolution_is_restored_with_engine(self, api, engine):
+        c = _case_twins(api)
+        app_module.engine = None
+        assert c.get("/fighter/Case%20Twin").status_code == 500
+        app_module.engine = engine
+        lower, upper = _ok(c.get("/fighter/Case%20Twin")), _ok(c.get("/fighter/CASE%20TWIN"))
+        assert (lower["name"], upper["name"]) == ("Case Twin", "CASE TWIN")
+        assert lower["intelligence"]["aura_score"] == 11.0 and upper["intelligence"]["aura_score"] == 88.0
+        assert c.get("/fighter/case%20twin").status_code == 409
+        assert c.get("/fighter/case%20twin/history").status_code == 409
+
+    def test_unique_fighter_still_resolves(self, api):
+        c = api([_fighter("Review Red")])
+        assert _ok(c.get("/fighter/review%20red"))["name"] == "Review Red"

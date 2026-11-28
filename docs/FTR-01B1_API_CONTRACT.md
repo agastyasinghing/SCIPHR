@@ -79,6 +79,9 @@ still serves prediction. Policy, in order:
 5. **Not found.** Unresolvable → 404 (history keeps its previous "no fight history" 404).
 6. **Failures.** A database error while resolving propagates (HTTP 500); it never falls
    back to a first match.
+   If the application database engine is missing (`main.engine is None`) both routes fail
+   closed with HTTP 500 `Database not initialized`; identity is never taken from the
+   predictor (`search_fighter`) or its calculator connection.
 
 The resolved stored name is used for everything in the response: `name`, the calculator
 stats, the profile-only corrupted-data fallback, `data_quality`, `scores`, attribution,
